@@ -13,7 +13,8 @@
                     <br />
                     Step 1. <a href="https://www.avalara.com" target="_blank">Create an Avalara account</a>
                     <br />
-                    Step 2. Login at the <a href="https://admin-avatax.avalara.net/login.aspx" target="_blank">service</a>
+                    Step 2. Login at the <a href="https://admin-avatax.avalara.net/login.aspx" target="_blank">production service</a>
+                        or at the <a href="https://admin-development.avalara.net/login.aspx target="_blank"> development service</a>
                     <br />
                     Step 3. Fill in your Avalara account details below
                     <br />
@@ -46,6 +47,24 @@
             <td class="adminData">
                 @Html.EditorFor(model => model.CompanyCode)
                 @Html.ValidationMessageFor(model => model.CompanyCode)
+            </td>
+        </tr>
+        <tr>
+            <td class="adminTitle">
+                @Html.NopLabelFor(model => model.SaveRequests):
+            </td>
+            <td class="adminData">
+                @Html.EditorFor(model => model.SaveRequests)
+                @Html.ValidationMessageFor(model => model.SaveRequests)
+            </td>
+        </tr>
+        <tr>
+            <td class="adminTitle">
+                @Html.NopLabelFor(model => model.SandboxEnvironment):
+            </td>
+            <td class="adminData">
+                @Html.EditorFor(model => model.SandboxEnvironment)
+                @Html.ValidationMessageFor(model => model.SandboxEnvironment)
             </td>
         </tr>
         <tr>

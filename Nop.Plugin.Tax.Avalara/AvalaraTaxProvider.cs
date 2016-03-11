@@ -19,7 +19,6 @@ namespace Nop.Plugin.Tax.Avalara
     public class AvalaraTaxProvider : BasePlugin, ITaxProvider
     {
         private const string TAXRATE_KEY = "Nop.taxrate.id-{0}";
-        private const string SERVICE_URL = "https://avatax.avalara.net/1.0/";
         private const string AVATAX_CLIENT = "nopCommerce Avalara tax rate provider 1.0";
 
         private readonly ISettingService _settingService;
@@ -39,12 +38,12 @@ namespace Nop.Plugin.Tax.Avalara
         public CalculateTaxResult GetTaxRate(CalculateTaxRequest calculateTaxRequest)
         {
             if (calculateTaxRequest.Address == null)
-                return new CalculateTaxResult() { Errors = new List<string>() { "Address is not set" } };
-            string cacheKey = string.Format(TAXRATE_KEY, calculateTaxRequest.Address.Id);
+                return new CalculateTaxResult { Errors = new List<string>() { "Address is not set" } };
+            var cacheKey = string.Format(TAXRATE_KEY, calculateTaxRequest.Address.Id);
             if (CacheManager.IsSet(cacheKey))
-                return new CalculateTaxResult() { TaxRate = CacheManager.Get<decimal>(cacheKey) };
+                return new CalculateTaxResult { TaxRate = CacheManager.Get<decimal>(cacheKey) };
 
-            var address = new Address()
+            var address = new Address
             {
                 AddressCode = calculateTaxRequest.Address.Id.ToString(),
                 Line1 = calculateTaxRequest.Address.Address1,
@@ -54,15 +53,17 @@ namespace Nop.Plugin.Tax.Avalara
                 Country = calculateTaxRequest.Address.Country != null ? calculateTaxRequest.Address.Country.TwoLetterIsoCode : null,
                 PostalCode = calculateTaxRequest.Address.ZipPostalCode
             };
-            var taxRequest = new AvalaraTaxRequest()
+            var taxRequest = new AvalaraTaxRequest
             {
                 CustomerCode = calculateTaxRequest.Customer != null ? calculateTaxRequest.Customer.Id.ToString() : null,
-                Addresses = new Address[] { address }
+                Addresses = new [] { address }
             };
             var result = GetTaxResult(taxRequest);
-
+            if (result == null)
+                return new CalculateTaxResult { Errors = new List<string>() { "Bad request" } };
+            
             var errors = new List<string>();
-            decimal tax = decimal.Zero;
+            var tax = decimal.Zero;
             if (result.ResultCode.Equals(SeverityLevel.Success))
                 tax = result.TotalTax;
             else
@@ -70,12 +71,12 @@ namespace Nop.Plugin.Tax.Avalara
                     errors.Add(message.Summary);
 
             CacheManager.Set(cacheKey, result.TotalTax, 60);
-            return new CalculateTaxResult() { Errors = errors, TaxRate = tax};
+            return new CalculateTaxResult { Errors = errors, TaxRate = tax};
         }
 
         public AvalaraTaxResult GetTaxResult(AvalaraTaxRequest taxRequest)
         {
-            var line = new Line()
+            var line = new Line
             {
                 LineNo = "1",
                 DestinationCode = taxRequest.Addresses[0].AddressCode,
@@ -87,13 +88,14 @@ namespace Nop.Plugin.Tax.Avalara
             taxRequest.CompanyCode = _avalaraTaxSettings.CompanyCode;
             taxRequest.Client = AVATAX_CLIENT;
             taxRequest.DetailLevel = DetailLevel.Tax;
-            taxRequest.DocType = DocType.SalesInvoice;
-            taxRequest.Lines = new Line[] { line };
+            taxRequest.DocType = _avalaraTaxSettings.SaveRequests ? DocType.SalesInvoice : DocType.SalesOrder;
+            taxRequest.Lines = new [] { line };
             var streamTaxRequest = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(taxRequest));
 
+            var service_url = _avalaraTaxSettings.SandboxEnvironment ? "https://development.avalara.net" : "https://avatax.avalara.net";
             var login = string.Format("{0}:{1}", _avalaraTaxSettings.AccountId, _avalaraTaxSettings.LicenseKey);
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
-            var request = (HttpWebRequest)WebRequest.Create(string.Format("{0}tax/get", SERVICE_URL));
+            var request = (HttpWebRequest)WebRequest.Create(string.Format("{0}/1.0/tax/get", service_url));
             request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
             request.Method = "POST";
             request.ContentType = "application/json";
@@ -156,21 +158,27 @@ namespace Nop.Plugin.Tax.Avalara
         public override void Install()
         {
             //settings
-            var settings = new AvalaraTaxSettings()
+            var settings = new AvalaraTaxSettings
             {
                 AccountId = string.Empty,
                 LicenseKey = string.Empty,
-                CompanyCode = string.Empty
+                CompanyCode = string.Empty,
+                SaveRequests = false,
+                SandboxEnvironment = false
             };
             _settingService.SaveSetting(settings);
 
             //locales
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AccountId", "Account ID");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AccountId.Hint", "Avalara account ID");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AccountId.Hint", "Avalara account ID.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey", "License key");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey.Hint", "Avalara account license key");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey.Hint", "Avalara account license key.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode", "Company code");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode.Hint", "Your company code in Avalara account");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode.Hint", "Your company code in Avalara account.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment", "Sandbox environment");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment.Hint", "Use development account (for testing).");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests", "Save requests");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests.Hint", "Save tax calculation requests in the tax history on your Avalara account.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Country", "Country");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Region", "State/Province");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.City", "City");
@@ -195,6 +203,10 @@ namespace Nop.Plugin.Tax.Avalara
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Country");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Region");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.City");

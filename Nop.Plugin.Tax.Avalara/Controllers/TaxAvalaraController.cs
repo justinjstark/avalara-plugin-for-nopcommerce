@@ -57,11 +57,13 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         [ChildActionOnly]
         public ActionResult Configure()
         {
-            var model = new TaxAvalaraModel()
+            var model = new TaxAvalaraModel
             {
                 AccountId = _avalaraTaxSettings.AccountId,
                 LicenseKey = _avalaraTaxSettings.LicenseKey,
-                CompanyCode = _avalaraTaxSettings.CompanyCode
+                CompanyCode = _avalaraTaxSettings.CompanyCode,
+                SaveRequests = _avalaraTaxSettings.SaveRequests,
+                SandboxEnvironment = _avalaraTaxSettings.SandboxEnvironment
             };
 
             PrepareAddress(model.TestAddress);
@@ -79,7 +81,10 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             _avalaraTaxSettings.AccountId = model.AccountId;
             _avalaraTaxSettings.LicenseKey = model.LicenseKey;
             _avalaraTaxSettings.CompanyCode = model.CompanyCode;
+            _avalaraTaxSettings.SaveRequests = model.SaveRequests;
+            _avalaraTaxSettings.SandboxEnvironment = model.SandboxEnvironment;
             _settingService.SaveSetting(_avalaraTaxSettings);
+            SuccessNotification(_localizationService.GetResource("Admin.Plugins.Saved"));
 
             PrepareAddress(model.TestAddress);
 
@@ -95,7 +100,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
             var country = _countryService.GetCountryById(model.TestAddress.CountryId);
             var region = _stateProvinceService.GetStateProvinceById(model.TestAddress.RegionId);
-            var address = new Address()
+            var address = new Address
             {
                 AddressCode = "1",
                 Country = country != null ? country.TwoLetterIsoCode : null,
@@ -103,10 +108,10 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 City = model.TestAddress.City,
                 Line1 = model.TestAddress.Address
             };
-            var taxRequest = new AvalaraTaxRequest()
+            var taxRequest = new AvalaraTaxRequest
             {
                 CustomerCode = _workContext.CurrentCustomer.Id.ToString(),
-                Addresses = new Address[] { address }
+                Addresses = new [] { address }
             };
             var taxProvider = (AvalaraTaxProvider)_taxService.LoadTaxProviderBySystemName("Tax.Avalara");
 
