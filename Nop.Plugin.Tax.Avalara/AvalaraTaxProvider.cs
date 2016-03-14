@@ -67,7 +67,7 @@ namespace Nop.Plugin.Tax.Avalara
             if (result.ResultCode.Equals(SeverityLevel.Success))
                 tax = result.TotalTax;
             else
-                foreach (Message message in result.Messages)
+                foreach (var message in result.Messages)
                     errors.Add(message.Summary);
 
             CacheManager.Set(cacheKey, result.TotalTax, 60);
@@ -92,10 +92,10 @@ namespace Nop.Plugin.Tax.Avalara
             taxRequest.Lines = new [] { line };
             var streamTaxRequest = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(taxRequest));
 
-            var service_url = _avalaraTaxSettings.SandboxEnvironment ? "https://development.avalara.net" : "https://avatax.avalara.net";
+            var serviceUrl = _avalaraTaxSettings.SandboxEnvironment ? "https://development.avalara.net" : "https://avatax.avalara.net";
             var login = string.Format("{0}:{1}", _avalaraTaxSettings.AccountId, _avalaraTaxSettings.LicenseKey);
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
-            var request = (HttpWebRequest)WebRequest.Create(string.Format("{0}/1.0/tax/get", service_url));
+            var request = (HttpWebRequest)WebRequest.Create(string.Format("{0}/1.0/tax/get", serviceUrl));
             request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
             request.Method = "POST";
             request.ContentType = "application/json";
