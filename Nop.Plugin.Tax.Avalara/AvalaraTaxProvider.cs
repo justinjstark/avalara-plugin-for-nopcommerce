@@ -23,11 +23,15 @@ namespace Nop.Plugin.Tax.Avalara
 
         private readonly ISettingService _settingService;
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
+        private readonly ICacheManager _cacheManager;
 
-        public AvalaraTaxProvider(ISettingService settingService, AvalaraTaxSettings avalaraTaxSettings)
+        public AvalaraTaxProvider(ISettingService settingService, 
+            AvalaraTaxSettings avalaraTaxSettings,
+            ICacheManager cacheManager)
         {
             this._settingService = settingService;
             this._avalaraTaxSettings = avalaraTaxSettings;
+            this._cacheManager = cacheManager;
         }
         
         /// <summary>
@@ -40,8 +44,8 @@ namespace Nop.Plugin.Tax.Avalara
             if (calculateTaxRequest.Address == null)
                 return new CalculateTaxResult { Errors = new List<string>() { "Address is not set" } };
             var cacheKey = string.Format(TAXRATE_KEY, calculateTaxRequest.Address.Id);
-            if (CacheManager.IsSet(cacheKey))
-                return new CalculateTaxResult { TaxRate = CacheManager.Get<decimal>(cacheKey) };
+            if (_cacheManager.IsSet(cacheKey))
+                return new CalculateTaxResult { TaxRate = _cacheManager.Get<decimal>(cacheKey) };
 
             var address = new Address
             {
@@ -70,7 +74,7 @@ namespace Nop.Plugin.Tax.Avalara
                 foreach (var message in result.Messages)
                     errors.Add(message.Summary);
 
-            CacheManager.Set(cacheKey, result.TotalTax, 60);
+            _cacheManager.Set(cacheKey, result.TotalTax, 60);
             return new CalculateTaxResult { Errors = errors, TaxRate = tax};
         }
 
@@ -126,17 +130,6 @@ namespace Nop.Plugin.Tax.Avalara
             }
 
             return avalaraTaxResult;
-        }
-
-        /// <summary>
-        /// Gets a cache manager
-        /// </summary>
-        public ICacheManager CacheManager
-        {
-            get
-            {
-                return new MemoryCacheManager();
-            }
         }
 
         /// <summary>
