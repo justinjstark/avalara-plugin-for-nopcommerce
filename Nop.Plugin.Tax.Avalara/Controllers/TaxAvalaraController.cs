@@ -110,7 +110,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             };
             var taxRequest = new AvalaraTaxRequest
             {
-                CustomerCode = _workContext.CurrentCustomer.Id.ToString(),
+                CustomerCode = _workContext.CurrentCustomer.CustomerGuid.ToString(),
                 Addresses = new [] { address }
             };
             var taxProvider = (AvalaraTaxProvider)_taxService.LoadTaxProviderBySystemName("Tax.Avalara");

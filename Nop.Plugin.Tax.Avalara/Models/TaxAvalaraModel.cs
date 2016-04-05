@@ -39,18 +39,18 @@ namespace Nop.Plugin.Tax.Avalara.Models
             AvailableStates = new List<SelectListItem>();
         }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.Country")]
+        [NopResourceDisplayName("Admin.Address.Fields.Country")]
         public int CountryId { get; set; }
         public IList<SelectListItem> AvailableCountries { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.Region")]
+        [NopResourceDisplayName("Admin.Address.Fields.StateProvince")]
         public int RegionId { get; set; }
         public IList<SelectListItem> AvailableStates { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.City")]
+        [NopResourceDisplayName("Admin.Address.Fields.City")]
         public string City { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.Address")]
+        [NopResourceDisplayName("Admin.Address.Fields.Address1")]
         public string Address { get; set; }
     }
 }

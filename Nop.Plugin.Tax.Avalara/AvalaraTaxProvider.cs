@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Web.Routing;
@@ -9,6 +10,7 @@ using Nop.Core.Caching;
 using Nop.Core.Plugins;
 using Nop.Services.Configuration;
 using Nop.Services.Localization;
+using Nop.Services.Logging;
 using Nop.Services.Tax;
 
 namespace Nop.Plugin.Tax.Avalara
@@ -21,17 +23,20 @@ namespace Nop.Plugin.Tax.Avalara
         private const string TAXRATE_KEY = "Nop.taxrate.id-{0}";
         private const string AVATAX_CLIENT = "nopCommerce Avalara tax rate provider 1.0";
 
-        private readonly ISettingService _settingService;
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
         private readonly ICacheManager _cacheManager;
+        private readonly ILogger _logger;
+        private readonly ISettingService _settingService;        
 
-        public AvalaraTaxProvider(ISettingService settingService, 
-            AvalaraTaxSettings avalaraTaxSettings,
-            ICacheManager cacheManager)
+        public AvalaraTaxProvider(AvalaraTaxSettings avalaraTaxSettings,
+            ICacheManager cacheManager,
+            ILogger logger,
+            ISettingService settingService)
         {
-            this._settingService = settingService;
             this._avalaraTaxSettings = avalaraTaxSettings;
             this._cacheManager = cacheManager;
+            this._logger = logger;
+            this._settingService = settingService;            
         }
         
         /// <summary>
@@ -59,7 +64,7 @@ namespace Nop.Plugin.Tax.Avalara
             };
             var taxRequest = new AvalaraTaxRequest
             {
-                CustomerCode = calculateTaxRequest.Customer != null ? calculateTaxRequest.Customer.Id.ToString() : null,
+                CustomerCode = calculateTaxRequest.Customer != null ? calculateTaxRequest.Customer.CustomerGuid.ToString() : null,
                 Addresses = new [] { address }
             };
             var result = GetTaxResult(taxRequest);
@@ -126,6 +131,8 @@ namespace Nop.Plugin.Tax.Avalara
                 {
                     var stringResult = streamReader.ReadToEnd();
                     avalaraTaxResult = JsonConvert.DeserializeObject<AvalaraTaxResult>(stringResult);
+                    _logger.Error(string.Format("Avalara errors: {0}", avalaraTaxResult.Messages.Aggregate(string.Empty,
+                        (current, next) => string.Format("{0}, {1}", current, next.Summary)).Trim(',')), ex);
                 }
             }
 
@@ -164,18 +171,14 @@ namespace Nop.Plugin.Tax.Avalara
             //locales
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AccountId", "Account ID");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AccountId.Hint", "Avalara account ID.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey", "License key");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey.Hint", "Avalara account license key.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode", "Company code");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode.Hint", "Your company code in Avalara account.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey", "License key");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey.Hint", "Avalara account license key.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment", "Sandbox environment");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment.Hint", "Use development account (for testing).");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests", "Save requests");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests.Hint", "Save tax calculation requests in the tax history on your Avalara account.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Country", "Country");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Region", "State/Province");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.City", "City");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Address", "Address");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Testing", "Test tax calculation");
 
             base.Install();
@@ -192,18 +195,14 @@ namespace Nop.Plugin.Tax.Avalara
             //locales
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AccountId");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AccountId.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.CompanyCode.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.LicenseKey.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SandboxEnvironment.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.SaveRequests.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Country");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Region");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.City");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Address");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Testing");
 
             base.Uninstall();
