@@ -38,6 +38,7 @@
   <ItemGroup>
     <Reference Include="Autofac">
       <HintPath>..\..\packages\Autofac.3.5.2\lib\net40\Autofac.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\..\packages\Newtonsoft.Json.7.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
@@ -48,13 +49,14 @@
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Mvc">
       <HintPath>..\..\packages\Microsoft.AspNet.Mvc.5.2.3\lib\net45\System.Web.Mvc.dll</HintPath>
+      <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AvalaraTaxRequest.cs" />
     <Compile Include="Controllers\TaxAvalaraController.cs" />
     <Compile Include="AvalaraTaxProvider.cs" />
-    <Compile Include="DependencyRegistrar.cs" />
+    <Compile Include="Infrastructure\DependencyRegistrar.cs" />
     <Compile Include="Models\TaxAvalaraModel.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="AvalaraTaxSettings.cs" />
