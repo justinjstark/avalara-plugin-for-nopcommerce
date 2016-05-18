@@ -20,7 +20,15 @@ namespace Nop.Plugin.Tax.Avalara
     /// </summary>
     public class AvalaraTaxProvider : BasePlugin, ITaxProvider
     {
-        private const string TAXRATE_KEY = "Nop.taxrate.id-{0}";
+        /// <summary>
+        /// {0} - Address 1
+        /// {1} - Address 2
+        /// {2} - City
+        /// {3} - StateProvinceId
+        /// {4} - CountryId
+        /// {5} - ZipPostalCode
+        /// </summary>
+        private const string TAXRATE_KEY = "Nop.taxrate.id-{0}-{1}-{2}-{3}-{4}-{5}";
         private const string AVATAX_CLIENT = "nopCommerce Avalara tax rate provider 1.0";
 
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
@@ -48,7 +56,16 @@ namespace Nop.Plugin.Tax.Avalara
         {
             if (calculateTaxRequest.Address == null)
                 return new CalculateTaxResult { Errors = new List<string>() { "Address is not set" } };
-            var cacheKey = string.Format(TAXRATE_KEY, calculateTaxRequest.Address.Id);
+
+            string address1 = !string.IsNullOrEmpty(calculateTaxRequest.Address.Address1) ? calculateTaxRequest.Address.Address1 : "";
+            string address2 = !string.IsNullOrEmpty(calculateTaxRequest.Address.Address2) ? calculateTaxRequest.Address.Address2 : "";
+            string city = !string.IsNullOrEmpty(calculateTaxRequest.Address.City) ? calculateTaxRequest.Address.City : "";
+            int stateProvinceId = calculateTaxRequest.Address.StateProvince != null ? calculateTaxRequest.Address.StateProvince.Id : 0;
+            int countryId = calculateTaxRequest.Address.Country != null ? calculateTaxRequest.Address.Country.Id : 0;
+            string zipPostalCode = !string.IsNullOrEmpty(calculateTaxRequest.Address.ZipPostalCode) ? calculateTaxRequest.Address.ZipPostalCode : "";
+
+            string cacheKey = string.Format(TAXRATE_KEY, address1, address2, city, stateProvinceId, countryId, zipPostalCode);
+
             if (_cacheManager.IsSet(cacheKey))
                 return new CalculateTaxResult { TaxRate = _cacheManager.Get<decimal>(cacheKey) };
 
