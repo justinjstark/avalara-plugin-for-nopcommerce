@@ -20,11 +20,11 @@ namespace Nop.Plugin.Tax.Avalara.Models
         [NopResourceDisplayName("Plugins.Tax.Avalara.CompanyCode")]
         public string CompanyCode { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.SaveRequests")]
-        public bool SaveRequests { get; set; }
+        [NopResourceDisplayName("Plugins.Tax.Avalara.IsSandboxEnvironment")]
+        public bool IsSandboxEnvironment { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.SandboxEnvironment")]
-        public bool SandboxEnvironment { get; set; }
+        [NopResourceDisplayName("Plugins.Tax.Avalara.CommitTransactions")]
+        public bool CommitTransactions { get; set; }
 
         public TaxAvalaraAddressModel TestAddress { get; set; }
 

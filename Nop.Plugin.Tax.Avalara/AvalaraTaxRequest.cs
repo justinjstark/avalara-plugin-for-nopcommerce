@@ -1,4 +1,6 @@
-﻿using System;
+﻿//Contribution: https://github.com/avadev/AvaTax-Calc-REST-csharp
+
+using System;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
@@ -16,17 +18,21 @@ namespace Nop.Plugin.Tax.Avalara
 
         public string Client { get; set; }
 
+        public string DocCode { get; set; }
+
         [JsonConverter(typeof(StringEnumConverter))]
         public DocType DocType { get; set; }
 
         public string CompanyCode { get; set; }
+
+        public bool Commit { get; set; }
 
         [JsonConverter(typeof(StringEnumConverter))]
         public DetailLevel DetailLevel { get; set; }
 
         public string BusinessIdentificationNo { get; set; }
 
-        public string CurrencyCode { get; set; }
+        public string ExemptionNo { get; set; }
     }
 
     public class Address
@@ -54,9 +60,15 @@ namespace Nop.Plugin.Tax.Avalara
 
         public string OriginCode { get; set; }
 
+        public string ItemCode { get; set; }
+
         public decimal Qty { get; set; }
 
         public decimal Amount { get; set; }
+
+        public string TaxCode { get; set; }
+
+        public string Description { get; set; }
     }
 
     public class AvalaraTaxResult

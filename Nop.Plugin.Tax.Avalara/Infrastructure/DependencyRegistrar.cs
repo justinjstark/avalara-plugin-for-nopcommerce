@@ -21,8 +21,7 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         public virtual void Register(ContainerBuilder builder, ITypeFinder typeFinder, NopConfig config)
         {
             //we cache presentation models between requests
-            builder.RegisterType<AvalaraTaxProvider>()
-                .WithParameter(ResolvedParameter.ForNamed<ICacheManager>("nop_cache_static"));
+            builder.RegisterType<AvalaraTaxProvider>().WithParameter(ResolvedParameter.ForNamed<ICacheManager>("nop_cache_static"));
         }
 
         /// <summary>
