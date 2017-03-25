@@ -11,24 +11,29 @@ namespace Nop.Plugin.Tax.Avalara.Models
             TestAddress = new TaxAvalaraAddressModel();
         }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.AccountId")]
+        public bool IsConfigured { get; set; }
+
+        [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.AccountId")]
         public string AccountId { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.LicenseKey")]
+        [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.LicenseKey")]
         public string LicenseKey { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.CompanyCode")]
+        [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.CompanyCode")]
         public string CompanyCode { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.IsSandboxEnvironment")]
+        [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.IsSandboxEnvironment")]
         public bool IsSandboxEnvironment { get; set; }
 
-        [NopResourceDisplayName("Plugins.Tax.Avalara.CommitTransactions")]
+        [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.CommitTransactions")]
         public bool CommitTransactions { get; set; }
+
+        [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.ValidateAddresses")]
+        public bool ValidateAddresses { get; set; }
 
         public TaxAvalaraAddressModel TestAddress { get; set; }
 
-        public string TestingResult { get; set; }
+        public string TestTaxResult { get; set; }
     }
 
     public class TaxAvalaraAddressModel
@@ -52,5 +57,8 @@ namespace Nop.Plugin.Tax.Avalara.Models
 
         [NopResourceDisplayName("Admin.Address.Fields.Address1")]
         public string Address { get; set; }
+
+        [NopResourceDisplayName("Admin.Address.Fields.ZipPostalCode")]
+        public string ZipPostalCode { get; set; }
     }
 }

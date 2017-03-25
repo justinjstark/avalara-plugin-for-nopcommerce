@@ -8,7 +8,7 @@ using Nop.Core.Infrastructure.DependencyManagement;
 namespace Nop.Plugin.Tax.Avalara.Infrastructure
 {
     /// <summary>
-    /// Dependency registrar
+    /// Dependency registrar of the Avalara tax provider
     /// </summary>
     public class DependencyRegistrar : IDependencyRegistrar
     {
@@ -20,7 +20,7 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         /// <param name="config">Config</param>
         public virtual void Register(ContainerBuilder builder, ITypeFinder typeFinder, NopConfig config)
         {
-            //we cache presentation models between requests
+            //we cache tax rate between requests
             builder.RegisterType<AvalaraTaxProvider>().WithParameter(ResolvedParameter.ForNamed<ICacheManager>("nop_cache_static"));
         }
 

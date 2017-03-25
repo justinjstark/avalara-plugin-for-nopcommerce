@@ -2,6 +2,9 @@
 
 namespace Nop.Plugin.Tax.Avalara
 {
+    /// <summary>
+    /// Represents settings for the Avalara tax provider 
+    /// </summary>
     public class AvalaraTaxSettings : ISettings
     {
         /// <summary>
@@ -28,5 +31,10 @@ namespace Nop.Plugin.Tax.Avalara
         /// Gets or sets a value indicating whether to commit tax transactions (recorded in the history on your Avalara account)
         /// </summary>
         public bool CommitTransactions { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to validate addresses before tax requesting (only for US or Canadian address)
+        /// </summary>
+        public bool ValidateAddresses { get; set; }
     }
 }

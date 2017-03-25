@@ -8,10 +8,10 @@
         <div class="panel panel-default">
             <div class="panel-body">
                 <p>
-                    To enable this provider, you'll need to:<br />
+                    To enable this tax provider, you'll need to:<br />
                     <br />
                     1. <a href="https://www.avalara.com" target="_blank">Create an Avalara account</a><br />
-                    2. Login at the <a href="https://admin-avatax.avalara.net/login.aspx" target="_blank">production service</a>
+                    2. Log in at the <a href="https://admin-avatax.avalara.net/login.aspx" target="_blank">production service</a>
                        or at the <a href="https://admin-development.avalara.net/login.aspx target=" _blank"> development service</a><br />
                     3. Add a company and some nexus jurisdiction selections to get any tax results<br />
                     4. Fill in your Avalara account details below<br />
@@ -62,86 +62,123 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <div class="col-md-3">
+                        @Html.NopLabelFor(model => model.ValidateAddresses)
+                    </div>
+                    <div class="col-md-9">
+                        @Html.NopEditorFor(model => model.ValidateAddresses)
+                        @Html.ValidationMessageFor(model => model.ValidateAddresses)
+                    </div>
+                </div>
+                <div class="form-group">
                     <div class="col-md-9 col-md-offset-3">
-                        <input type="submit" name="save" class="btn btn-primary" value="@T("Admin.Common.Save")" />
+                        <div class="input-group input-group-short">
+                            <div class="input-group-text">
+                                <button type="submit" name="save" class="btn btn-primary">
+                                    @T("Admin.Common.Save")
+                                </button>
+                            </div>
+                            @if (Model.IsConfigured)
+                            {
+                                <div class="input-group-btn">
+                                    <button type="submit" name="testConnection" class="btn btn-info">
+                                        @T("Plugins.Tax.Avalara.TestConnection")
+                                    </button>
+                                </div>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="panel panel-default">
+        @if (Model.IsConfigured)
+        {
+            <div class="panel panel-default">
 
-            <script type="text/javascript">
-                $(document).ready(function() {
-                    $("#@Html.FieldIdFor(model => model.TestAddress.CountryId)").change(function(){
-                        var selectedItem = $(this).val();
-                        var ddlStates = $("#@Html.FieldIdFor(model => model.TestAddress.RegionId)");
-                        $.ajax({
-                            cache: false,
-                            type: "GET",
-                            url: "@(Url.Action("GetStatesByCountryId"))",
-                            data: { "countryId": selectedItem},
-                            success: function(data) {
-                                ddlStates.html('');
-                                $.each(data, function(id, option) {
-                                    ddlStates.append($('<option></option>').val(option.id).html(option.name));
-                                });
-                            },
-                            error: function(xhr, ajaxOptions, thrownError) {
-                                alert('Failed to retrieve states.');
-                            }
+                <script type="text/javascript">
+                    $(document).ready(function() {
+                        $("#@Html.FieldIdFor(model => model.TestAddress.CountryId)").change(function(){
+                            var selectedItem = $(this).val();
+                            var ddlStates = $("#@Html.FieldIdFor(model => model.TestAddress.RegionId)");
+                            $.ajax({
+                                cache: false,
+                                type: "GET",
+                                url: "@(Url.Action("GetStatesByCountryId"))",
+                                data: { "countryId": selectedItem},
+                                success: function(data) {
+                                    ddlStates.html('');
+                                    $.each(data, function(id, option) {
+                                        ddlStates.append($('<option></option>').val(option.id).html(option.name));
+                                    });
+                                },
+                                error: function(xhr, ajaxOptions, thrownError) {
+                                    alert('Failed to retrieve states.');
+                                }
+                            });
                         });
                     });
-                });
-            </script>
+                </script>
 
-            <div class="panel-body">
-                <div class="form-group">
-                    <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.TestAddress.CountryId)
+                <div class="panel-body">
+                    <div class="form-group">
+                        <div class="col-md-3">
+                            @Html.NopLabelFor(model => model.TestAddress.CountryId)
+                        </div>
+                        <div class="col-md-9">
+                            @Html.NopDropDownListFor(model => model.TestAddress.CountryId, Model.TestAddress.AvailableCountries)
+                            @Html.ValidationMessageFor(model => model.TestAddress.CountryId)
+                        </div>
                     </div>
-                    <div class="col-md-9">
-                        @Html.NopDropDownListFor(model => model.TestAddress.CountryId, Model.TestAddress.AvailableCountries)
-                        @Html.ValidationMessageFor(model => model.TestAddress.CountryId)
+                    <div class="form-group">
+                        <div class="col-md-3">
+                            @Html.NopLabelFor(model => model.TestAddress.RegionId)
+                        </div>
+                        <div class="col-md-9">
+                            @Html.NopDropDownListFor(model => model.TestAddress.RegionId, Model.TestAddress.AvailableStates)
+                            @Html.ValidationMessageFor(model => model.TestAddress.RegionId)
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.TestAddress.RegionId)
+                    <div class="form-group">
+                        <div class="col-md-3">
+                            @Html.NopLabelFor(model => model.TestAddress.City)
+                        </div>
+                        <div class="col-md-9">
+                            @Html.NopEditorFor(model => model.TestAddress.City)
+                            @Html.ValidationMessageFor(model => model.TestAddress.City)
+                        </div>
                     </div>
-                    <div class="col-md-9">
-                        @Html.NopDropDownListFor(model => model.TestAddress.RegionId, Model.TestAddress.AvailableStates)
-                        @Html.ValidationMessageFor(model => model.TestAddress.RegionId)
+                    <div class="form-group">
+                        <div class="col-md-3">
+                            @Html.NopLabelFor(model => model.TestAddress.Address)
+                        </div>
+                        <div class="col-md-9">
+                            @Html.NopEditorFor(model => model.TestAddress.Address)
+                            @Html.ValidationMessageFor(model => model.TestAddress.Address)
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.TestAddress.City)
+                    <div class="form-group">
+                        <div class="col-md-3">
+                            @Html.NopLabelFor(model => model.TestAddress.ZipPostalCode)
+                        </div>
+                        <div class="col-md-9">
+                            @Html.NopEditorFor(model => model.TestAddress.ZipPostalCode)
+                            @Html.ValidationMessageFor(model => model.TestAddress.ZipPostalCode)
+                        </div>
                     </div>
-                    <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.TestAddress.City)
-                        @Html.ValidationMessageFor(model => model.TestAddress.City)
+                    <div class="form-group">
+                        <div class="col-md-9 col-md-offset-3">
+                            <button type="submit" name="testTax" class="btn btn-info">
+                                @T("Plugins.Tax.Avalara.TestTax")
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.TestAddress.Address)
-                    </div>
-                    <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.TestAddress.Address)
-                        @Html.ValidationMessageFor(model => model.TestAddress.Address)
-                    </div>
-                </div>
-                <div class="form-group">
-                    <div class="col-md-9 col-md-offset-3">
-                        <input type="submit" name="test" class="btn btn-primary" value="@T("Plugins.Tax.Avalara.Testing")" />
-                    </div>
-                </div>
-                <div class="form-group">
-                    <div class="col-md-12" style="white-space: pre-line">
-                        @Html.Raw(Model.TestingResult)
+                    <div class="form-group">
+                        <div class="col-md-12" style="white-space: pre-line">
+                            @Html.Raw(Model.TestTaxResult)
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        }
     </div>
 }
