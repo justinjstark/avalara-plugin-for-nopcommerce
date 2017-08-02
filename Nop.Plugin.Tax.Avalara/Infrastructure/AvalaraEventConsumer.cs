@@ -8,7 +8,7 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
     /// <summary>
     /// Represents Avalara event consumer (used for commit and void tax requests to Avalara service)
     /// </summary>
-    public partial class AvalaraEventConsumer : 
+    public partial class AvalaraEventConsumer :
         IConsumer<OrderPlacedEvent>,
         IConsumer<OrderCancelledEvent>,
         IConsumer<EntityDeleted<Order>>

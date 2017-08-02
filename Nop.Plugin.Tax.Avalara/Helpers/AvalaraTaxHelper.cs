@@ -23,7 +23,7 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
         /// </summary>
         public static string AVATAX_CLIENT
         {
-            get { return "nopCommerce-AvalaraTaxRateProvider-1.3"; }
+            get { return "nopCommerce-AvalaraTaxRateProvider-1.31"; }
         }
 
         #endregion
@@ -78,8 +78,9 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
                 foreach (var address in taxRequest.Addresses)
                 {
                     //(only for US or Canadian address)
-                    if (!address.Country.Equals("us", StringComparison.InvariantCultureIgnoreCase) &&
-                        !address.Country.Equals("ca", StringComparison.InvariantCultureIgnoreCase))
+                    if (address.Country == null || 
+                        (!address.Country.Equals("us", StringComparison.InvariantCultureIgnoreCase) &&
+                        !address.Country.Equals("ca", StringComparison.InvariantCultureIgnoreCase)))
                         continue;
 
                     var validatingResult = ValidateAddress(address, avalaraTaxSettings, logger);

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
@@ -764,12 +765,14 @@ namespace Nop.Plugin.Tax.Avalara.Domain
     /// <summary>
     /// Enumeration of customer usage types (used for tax exempt)
     /// </summary>
+    [DataContract]
     public enum CustomerUsageType
     {
         /// <summary>
         /// Non exempt
         /// </summary>
-        X,
+        [EnumMember(Value = "")]
+        NonExempt,
 
         /// <summary>
         /// Federal government (United States)
