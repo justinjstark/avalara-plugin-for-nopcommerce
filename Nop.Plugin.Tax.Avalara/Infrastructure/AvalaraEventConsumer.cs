@@ -8,7 +8,7 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
     /// <summary>
     /// Represents Avalara event consumer (used for commit and void tax requests to Avalara service)
     /// </summary>
-    public partial class AvalaraEventConsumer : 
+    public partial class AvalaraEventConsumer :
         IConsumer<OrderPlacedEvent>,
         IConsumer<OrderCancelledEvent>,
         IConsumer<EntityDeleted<Order>>
@@ -36,6 +36,9 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         /// <param name="eventMessage">Event message</param>
         public void HandleEvent(OrderPlacedEvent eventMessage)
         {
+            if (eventMessage.Order == null)
+                return;
+
             //ensure that Avalara tax rate provider is active
             var taxProvider = _taxService.LoadActiveTaxProvider() as AvalaraTaxProvider;
             if (taxProvider == null)
@@ -51,6 +54,9 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         /// <param name="eventMessage">Event message</param>
         public void HandleEvent(OrderCancelledEvent eventMessage)
         {
+            if (eventMessage.Order == null)
+                return;
+
             //ensure that Avalara tax rate provider is active
             var taxProvider = _taxService.LoadActiveTaxProvider() as AvalaraTaxProvider;
             if (taxProvider == null)
@@ -66,6 +72,9 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         /// <param name="eventMessage">Event message</param>
         public void HandleEvent(EntityDeleted<Order> eventMessage)
         {
+            if (eventMessage.Entity == null)
+                return;
+
             //ensure that Avalara tax rate provider is active
             var taxProvider = _taxService.LoadActiveTaxProvider() as AvalaraTaxProvider;
             if (taxProvider == null)

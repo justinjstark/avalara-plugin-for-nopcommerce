@@ -8,6 +8,7 @@ using Nop.Core;
 using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Helpers;
 using Nop.Plugin.Tax.Avalara.Models;
+using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Common;
 using Nop.Services.Configuration;
 using Nop.Services.Directory;
@@ -22,6 +23,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
     {
         #region Fields
 
+        private readonly AvalaraImportManager _avalaraImportManager;
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
         private readonly IAddressService _addressService;
         private readonly ICountryService _countryService;
@@ -36,7 +38,8 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         #region Ctor
 
-        public TaxAvalaraController(AvalaraTaxSettings avalaraTaxSettings,
+        public TaxAvalaraController(AvalaraImportManager avalaraImportManager,
+            AvalaraTaxSettings avalaraTaxSettings,
             IAddressService addressService,
             ICountryService countryService,
             ILocalizationService localizationService,
@@ -46,6 +49,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             IStoreContext storeContext,
             IWorkContext workContext)
         {
+            this._avalaraImportManager = avalaraImportManager;
             this._avalaraTaxSettings = avalaraTaxSettings;
             this._addressService = addressService;
             this._countryService = countryService;
@@ -287,6 +291,30 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 states.Insert(0, new { id = 0, name = _localizationService.GetResource("Admin.Address.OtherNonUS") });
 
             return Json(states, JsonRequestBehavior.AllowGet);
+        }
+        
+        [HttpPost]
+        public virtual ActionResult ImportTaxCodes()
+        {
+            try
+            {
+                var file = Request.Files["importexcelfile"];
+                if (file != null && file.ContentLength > 0)
+                {
+                    //import tax codes from the uploaded Excel file
+                    var importedTaxCodeNumber = _avalaraImportManager.ImportTaxCodesFromXlsx(file.InputStream);
+                    SuccessNotification(string.Format(_localizationService.GetResource("Plugins.Tax.Avalara.ImportTaxCodes.Success"), importedTaxCodeNumber));
+                }
+                else
+                    ErrorNotification(_localizationService.GetResource("Admin.Common.UploadFile"));
+            }
+            catch (Exception exception)
+            {
+                ErrorNotification(exception);
+            }
+
+            //we cannot redirect to the Configure action since it is only for child requests, so redirect to the Tax.ConfigureProvider
+            return RedirectToAction("ConfigureProvider", "Tax", new { systemName = "Tax.Avalara" });
         }
 
         #endregion

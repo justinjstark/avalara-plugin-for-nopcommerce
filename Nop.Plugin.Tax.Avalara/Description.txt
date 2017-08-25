@@ -1,7 +1,7 @@
 ﻿Group: Tax providers
 FriendlyName: Avalara tax rate provider
 SystemName: Tax.Avalara
-Version: 1.21
+Version: 1.22
 SupportedVersions: 3.80
 Author: nopCommerce team
 DisplayOrder: 1

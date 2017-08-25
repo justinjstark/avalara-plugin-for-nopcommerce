@@ -5,13 +5,13 @@ using System.Web.Routing;
 using Nop.Core;
 using Nop.Core.Caching;
 using Nop.Core.Domain.Catalog;
-using common = Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Tax;
 using Nop.Core.Plugins;
 using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Helpers;
+using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Configuration;
@@ -20,6 +20,7 @@ using Nop.Services.Localization;
 using Nop.Services.Logging;
 using Nop.Services.Orders;
 using Nop.Services.Tax;
+using common = Nop.Core.Domain.Common;
 
 namespace Nop.Plugin.Tax.Avalara
 {
@@ -46,11 +47,13 @@ namespace Nop.Plugin.Tax.Avalara
 
         #region Fields
 
+        private readonly AvalaraImportManager _avalaraImportManager;
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
         private readonly IAddressService _addressService;
         private readonly ICacheManager _cacheManager;
         private readonly ICheckoutAttributeParser _checkoutAttributeParser;
         private readonly ICountryService _countryService;
+        private readonly IGenericAttributeService _genericAttributeService;
         private readonly IGeoLookupService _geoLookupService;
         private readonly ILogger _logger;
         private readonly IProductAttributeParser _productAttributeParser;
@@ -63,11 +66,13 @@ namespace Nop.Plugin.Tax.Avalara
 
         #region Ctor
 
-        public AvalaraTaxProvider(AvalaraTaxSettings avalaraTaxSettings,
+        public AvalaraTaxProvider(AvalaraImportManager avalaraImportManager, 
+            AvalaraTaxSettings avalaraTaxSettings,
             IAddressService addressService,
             ICacheManager cacheManager,
             ICheckoutAttributeParser checkoutAttributeParser,
             ICountryService countryService,
+            IGenericAttributeService genericAttributeService,
             IGeoLookupService geoLookupService,
             ILogger logger,
             IProductAttributeParser productAttributeParser,
@@ -76,11 +81,13 @@ namespace Nop.Plugin.Tax.Avalara
             ITaxCategoryService taxCategoryService,
             TaxSettings taxSettings)
         {
+            this._avalaraImportManager = avalaraImportManager;
             this._avalaraTaxSettings = avalaraTaxSettings;
             this._addressService = addressService;
             this._cacheManager = cacheManager;
             this._checkoutAttributeParser = checkoutAttributeParser;
             this._countryService = countryService;
+            this._genericAttributeService = genericAttributeService;
             this._geoLookupService = geoLookupService;
             this._logger = logger;
             this._productAttributeParser = productAttributeParser;
@@ -221,7 +228,7 @@ namespace Nop.Plugin.Tax.Avalara
 
                 //set tax category as tax code
                 var productTaxCategory = _taxCategoryService.GetTaxCategoryById(orderItem.Product.Return(product => product.TaxCategoryId, 0));
-                item.TaxCode = productTaxCategory.Return(taxCategory => taxCategory.Name, null);
+                item.TaxCode = GetTaxCodeByTaxCategory(productTaxCategory);
 
                 ////try get product exemption
                 //item.ExemptionNo = orderItem.Product != null && orderItem.Product.IsTaxExempt
@@ -263,7 +270,7 @@ namespace Nop.Plugin.Tax.Avalara
             {
                 //try get tax code
                 var paymentTaxCategory = _taxCategoryService.GetTaxCategoryById(_taxSettings.PaymentMethodAdditionalFeeTaxClassId);
-                paymentItem.TaxCode = paymentTaxCategory.Return(taxCategory => taxCategory.Name, null);
+                paymentItem.TaxCode = GetTaxCodeByTaxCategory(paymentTaxCategory);
             }
             else
             {
@@ -305,7 +312,7 @@ namespace Nop.Plugin.Tax.Avalara
             {
                 //try get tax code
                 var shippingTaxCategory = _taxCategoryService.GetTaxCategoryById(_taxSettings.ShippingTaxClassId);
-                shippingItem.TaxCode = shippingTaxCategory.Return(taxCategory => taxCategory.Name, null);
+                shippingItem.TaxCode = GetTaxCodeByTaxCategory(shippingTaxCategory);
             }
             else
             {
@@ -363,7 +370,7 @@ namespace Nop.Plugin.Tax.Avalara
                 { 
                     //try get tax code
                     var attributeTaxCategory = _taxCategoryService.GetTaxCategoryById(attributeValue.CheckoutAttribute.TaxCategoryId);
-                    checkoutAttributeItem.TaxCode = attributeTaxCategory.Return(taxCategory => taxCategory.Name, null);
+                    checkoutAttributeItem.TaxCode = GetTaxCodeByTaxCategory(attributeTaxCategory);
                 }
 
                 return checkoutAttributeItem;
@@ -429,12 +436,12 @@ namespace Nop.Plugin.Tax.Avalara
 
             //customer tax exemption
             if (customer.IsTaxExempt)
-                return string.Format("Customer-{0}", customer.Id);
+                return CommonHelper.EnsureMaximumLength(string.Format("Exempt-customer-{0}", customer.Id), 25);
 
             //customer role tax exemption
             var exemptRole = customer.CustomerRoles.FirstOrDefault(role => role.Active && role.TaxExempt);
 
-            return exemptRole.Return(role => string.Format("Role-{0}", role.Id), null);
+            return exemptRole.Return(role => CommonHelper.EnsureMaximumLength(string.Format("Exempt-{0}", role.Name), 25), null);
         }
 
         /// <summary>
@@ -454,6 +461,25 @@ namespace Nop.Plugin.Tax.Avalara
                 Country = address.Country.Return(country => country.TwoLetterIsoCode, null),
                 PostalCode = address.ZipPostalCode
             };
+        }
+
+        /// <summary>
+        /// Get tax code of the passed tax category
+        /// </summary>
+        /// <param name="taxCategory">Tax category</param>
+        /// <returns>Tax code</returns>
+        protected string GetTaxCodeByTaxCategory(TaxCategory taxCategory)
+        {
+            if (taxCategory == null)
+                return null;
+
+            //try to get tax code from the previously saved attribute
+            var taxCode = taxCategory.GetAttribute<string>(_avalaraImportManager.AvaTaxCodeAttribute);
+            if (!string.IsNullOrEmpty(taxCode))
+                return taxCode;
+
+            //or use the name as tax code
+            return taxCategory.Name;
         }
 
         #endregion
@@ -530,13 +556,24 @@ namespace Nop.Plugin.Tax.Avalara
         }
 
         /// <summary>
-        /// Commit tax request for saving it on AvaTax account history 
+        /// Commit tax request to save it on AvaTax account history 
         /// </summary>
         /// <param name="order">Order</param>
         public void CommitTaxRequest(Order order)
         {
-            if (order == null || order.BillingAddress == null)
-                return;
+            GetTax(order, true);
+        }
+
+        /// <summary>
+        /// Get tax details for the placed order
+        /// </summary>
+        /// <param name="order">Order</param>
+        /// <param name="commit">Whether to commit tax request (record on the AvaTax account history)</param>
+        /// <returns>Tax details</returns>
+        public TaxResponse GetTax(Order order, bool commit)
+        {
+            if (order.BillingAddress == null)
+                return null;
 
             //create tax request
             var taxRequest = new TaxRequest
@@ -548,10 +585,10 @@ namespace Nop.Plugin.Tax.Avalara
                 CurrencyCode = order.CustomerCurrencyCode,
                 DetailLevel = DetailLevel.Tax,
                 Discount = order.OrderSubTotalDiscountExclTax,
-                DocCode = order.Id.ToString(),
-                DocType = _avalaraTaxSettings.CommitTransactions ? DocType.SalesInvoice : DocType.SalesOrder,
+                DocCode = commit ? order.Id.ToString() : order.OrderGuid.ToString(),
+                DocType = commit && _avalaraTaxSettings.CommitTransactions ? DocType.SalesInvoice : DocType.SalesOrder,
                 DocDate = DateTime.UtcNow.ToString("yyyy-MM-dd"),
-                PurchaseOrderNo = order.Id.ToString()                
+                PurchaseOrderNo = commit ? order.Id.ToString() : order.OrderGuid.ToString()
             };
 
             //set addresses
@@ -565,7 +602,7 @@ namespace Nop.Plugin.Tax.Avalara
             //set whole request tax exemption
             taxRequest.ExemptionNo = GetRequestExemption(order.Customer);
 
-            AvalaraTaxHelper.PostTaxRequest(taxRequest, _avalaraTaxSettings, _logger);
+            return AvalaraTaxHelper.PostTaxRequest(taxRequest, _avalaraTaxSettings, _logger);
         }
 
         /// <summary>
@@ -575,9 +612,6 @@ namespace Nop.Plugin.Tax.Avalara
         /// <param name="deleted">Whether order was deleted</param>
         public void VoidTaxRequest(Order order, bool deleted)
         {
-            if (order == null)
-                return;
-
             var cancelRequest = new CancelTaxRequest
             {
                 CancelCode = deleted ? CancelReason.DocDeleted : CancelReason.DocVoided,
@@ -620,6 +654,7 @@ namespace Nop.Plugin.Tax.Avalara
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Credentials.Verified", "Credentials verified");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId", "Account ID");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint", "Cpecify Avalara account ID.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AvaTaxCode", "AvaTax tax code");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions", "Commit transactions");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint", "Check for recording transactions in the history on your Avalara account.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CompanyCode", "Company code");
@@ -630,9 +665,11 @@ namespace Nop.Plugin.Tax.Avalara
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.IsSandboxEnvironment.Hint", "Check for using sandbox (testing environment).");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses", "Validate addresses");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses.Hint", "Check for validating addresses before tax requesting (only for US or Canadian address).");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes", "Import AvaTax tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes.Success", "Successfully imported {0} tax codes");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestConnection", "Test connection");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax", "Test tax calculation");
-
+            
             base.Install();
         }
 
@@ -641,6 +678,12 @@ namespace Nop.Plugin.Tax.Avalara
         /// </summary>
         public override void Uninstall()
         {
+            //tax codes
+            foreach (var taxCategory in _taxCategoryService.GetAllTaxCategories())
+            {
+                _genericAttributeService.SaveAttribute<string>(taxCategory, _avalaraImportManager.AvaTaxCodeAttribute, null);
+            }
+
             //settings
             _settingService.DeleteSetting<AvalaraTaxSettings>();
 
@@ -649,6 +692,7 @@ namespace Nop.Plugin.Tax.Avalara
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Credentials.Verified");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AvaTaxCode");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CompanyCode");
@@ -659,6 +703,8 @@ namespace Nop.Plugin.Tax.Avalara
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.IsSandboxEnvironment.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes.Success");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestConnection");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax");
 
