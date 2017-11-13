@@ -1,9 +1,0 @@
-﻿Group: Tax providers
-FriendlyName: Avalara tax rate provider
-SystemName: Tax.Avalara
-Version: 1.31
-SupportedVersions: 3.90
-Author: nopCommerce team
-DisplayOrder: 1
-FileName: Nop.Plugin.Tax.Avalara.dll
-Description: This plugin allows getting tax rates by using Avalara service

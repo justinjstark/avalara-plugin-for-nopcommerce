@@ -169,7 +169,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
         /// <param name="processPaymentRequest">Process payment request</param>
         /// <param name="details">Details</param>
         /// <returns>Tax total</returns>
-        protected decimal? GetTaxTotal(ProcessPaymentRequest processPaymentRequest, PlaceOrderContainter details)
+        protected decimal? GetTaxTotal(ProcessPaymentRequest processPaymentRequest, PlaceOrderContainer details)
         {
             //ensure that Avalara tax rate provider is active
             var taxProvider = _taxService.LoadActiveTaxProvider(details.Customer) as AvalaraTaxProvider;
@@ -239,7 +239,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 return base.PlaceOrder(processPaymentRequest);
 
             if (processPaymentRequest == null)
-                throw new ArgumentNullException("processPaymentRequest");
+                throw new ArgumentNullException(nameof(processPaymentRequest));
 
             var result = new PlaceOrderResult();
             try
@@ -264,7 +264,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
 
                 //process payment
-                ProcessPaymentResult processPaymentResult = null;
+                ProcessPaymentResult processPaymentResult;
                 //skip payment workflow if order total equals zero
                 var skipPaymentWorkflow = details.OrderTotal == decimal.Zero;
                 if (!skipPaymentWorkflow)
@@ -503,7 +503,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             {
                 //log errors
                 var logError = result.Errors.Aggregate("Error while placing order. ",
-                    (current, next) => string.Format("{0}Error {1}: {2}. ", current, result.Errors.IndexOf(next) + 1, next));
+                    (current, next) => $"{current}Error {result.Errors.IndexOf(next) + 1}: {next}. ");
                 var customer = _customerService.GetCustomerById(processPaymentRequest.CustomerId);
                 _logger.Error(logError, customer: customer);
             }

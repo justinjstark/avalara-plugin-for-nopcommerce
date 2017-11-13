@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
-using System.Web;
-using System.Web.Mvc;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Newtonsoft.Json;
 using Nop.Core;
 using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Helpers;
@@ -14,11 +17,14 @@ using Nop.Services.Configuration;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
+using Nop.Web.Framework;
 using Nop.Web.Framework.Controllers;
+using Nop.Web.Framework.Mvc.Filters;
 
 namespace Nop.Plugin.Tax.Avalara.Controllers
 {
-    [AdminAuthorize]
+    [AuthorizeAdmin]
+    [Area(AreaNames.Admin)]
     public class TaxAvalaraController : BasePluginController
     {
         #region Fields
@@ -97,8 +103,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         #region Methods
 
-        [ChildActionOnly]
-        public ActionResult Configure()
+        public IActionResult Configure()
         {
             //prepare model
             var model = new TaxAvalaraModel
@@ -118,7 +123,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         [HttpPost, ActionName("Configure")]
         [FormValueRequired("save")]
-        public ActionResult Configure(TaxAvalaraModel model)
+        public IActionResult Configure(TaxAvalaraModel model)
         {
             if (!ModelState.IsValid)
                 return Configure();
@@ -143,7 +148,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         [HttpPost, ActionName("Configure")]
         [FormValueRequired("testConnection")]
-        public ActionResult TestConnection(TaxAvalaraModel model)
+        public IActionResult TestConnection(TaxAvalaraModel model)
         {
             if (!ModelState.IsValid)
                 return Configure();
@@ -152,7 +157,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             var result = AvalaraTaxHelper.GetTaxRate(_avalaraTaxSettings);
 
             //display results
-            if (result.Return(response => response.ResultCode, SeverityLevel.Error) == SeverityLevel.Success)
+            if ((result?.ResultCode ?? SeverityLevel.Error) == SeverityLevel.Success)
                 SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Credentials.Verified"));
             else
                 ErrorNotification(_localizationService.GetResource("Plugins.Tax.Avalara.Credentials.Declined"));
@@ -166,7 +171,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         [HttpPost, ActionName("Configure")]
         [FormValueRequired("testTax")]
-        public ActionResult TestRequest(TaxAvalaraModel model)
+        public IActionResult TestRequest(TaxAvalaraModel model)
         {
             if (!ModelState.IsValid)
                 return Configure();
@@ -177,10 +182,10 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 Commit = true,
                 Client = AvalaraTaxHelper.AVATAX_CLIENT,
                 CompanyCode = _avalaraTaxSettings.CompanyCode,
-                CustomerCode = _workContext.CurrentCustomer.Return(customer => customer.Id.ToString(), null),
-                CurrencyCode = _workContext.WorkingCurrency.Return(currency => currency.CurrencyCode, null),
+                CustomerCode = _workContext.CurrentCustomer?.Id.ToString(),
+                CurrencyCode = _workContext.WorkingCurrency?.CurrencyCode,
                 DetailLevel = DetailLevel.Tax,
-                DocCode = string.Format("Test-{0}", Guid.NewGuid()),
+                DocCode = $"Test-{Guid.NewGuid()}",
                 DocType = _avalaraTaxSettings.CommitTransactions ? DocType.SalesInvoice : DocType.SalesOrder,
                 DocDate = DateTime.UtcNow.ToString("yyyy-MM-dd")
             };
@@ -195,8 +200,8 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 AddressCode = "0",
                 Line1 = model.TestAddress.Address,
                 City = model.TestAddress.City,
-                Region = destinationStateOrProvince.Return(state => state.Abbreviation, null),
-                Country = destinationCountry.Return(country => country.TwoLetterIsoCode, null),
+                Region = destinationStateOrProvince?.Abbreviation,
+                Country = destinationCountry?.TwoLetterIsoCode,
                 PostalCode = model.TestAddress.ZipPostalCode
             });
 
@@ -214,8 +219,8 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                     Line1 = originAddress.Address1,
                     Line2 = originAddress.Address2,
                     City = originAddress.City,
-                    Region = originAddress.StateProvince.Return(state => state.Abbreviation, null),
-                    Country = originAddress.Country.Return(country => country.TwoLetterIsoCode, null),
+                    Region = originAddress.StateProvince?.Abbreviation,
+                    Country = originAddress.Country?.TwoLetterIsoCode,
                     PostalCode = originAddress.ZipPostalCode
                 });
             }
@@ -230,7 +235,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 DestinationCode = "0",
                 ItemCode = "Test item line",
                 LineNo = "test",
-                OriginCode = originAddress.Return(address => address.Id, 0).ToString(),
+                OriginCode = (originAddress?.Id ?? 0).ToString(),
                 Qty = 1,
                 TaxCode = "test"
             };
@@ -241,7 +246,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
             //display results
             var resultstring = new StringBuilder();
-            if (taxResult.Return(result => result.ResultCode, SeverityLevel.Error) == SeverityLevel.Success)
+            if ((taxResult?.ResultCode ?? SeverityLevel.Error) == SeverityLevel.Success)
             {
                 //display validated address (only for US or Canadian address)
                 if (_avalaraTaxSettings.ValidateAddresses && taxResult.TaxAddresses != null && taxResult.TaxAddresses.Any() &&
@@ -249,11 +254,11 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                     destinationCountry.TwoLetterIsoCode.Equals("ca", StringComparison.InvariantCultureIgnoreCase)))
                 {
                     resultstring.Append("Validated address <br />");
-                    resultstring.AppendFormat("Postal / Zip code: {0}<br />", HttpUtility.HtmlEncode(taxResult.TaxAddresses[0].PostalCode));
-                    resultstring.AppendFormat("Country: {0}<br />", HttpUtility.HtmlEncode(taxResult.TaxAddresses[0].Country));
-                    resultstring.AppendFormat("Region: {0}<br />", HttpUtility.HtmlEncode(taxResult.TaxAddresses[0].Region));
-                    resultstring.AppendFormat("City: {0}<br />", HttpUtility.HtmlEncode(taxResult.TaxAddresses[0].City));
-                    resultstring.AppendFormat("Address: {0}<br /><br />", HttpUtility.HtmlEncode(taxResult.TaxAddresses[0].Address));
+                    resultstring.AppendFormat("Postal / Zip code: {0}<br />", WebUtility.HtmlEncode(taxResult.TaxAddresses[0].PostalCode));
+                    resultstring.AppendFormat("Country: {0}<br />", WebUtility.HtmlEncode(taxResult.TaxAddresses[0].Country));
+                    resultstring.AppendFormat("Region: {0}<br />", WebUtility.HtmlEncode(taxResult.TaxAddresses[0].Region));
+                    resultstring.AppendFormat("City: {0}<br />", WebUtility.HtmlEncode(taxResult.TaxAddresses[0].City));
+                    resultstring.AppendFormat("Address: {0}<br /><br />", WebUtility.HtmlEncode(taxResult.TaxAddresses[0].Address));
                 }
 
                 //display tax rates by jurisdictions
@@ -262,14 +267,14 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                     resultstring.AppendFormat("Total tax rate: {0:0.00}%<br />", taxResult.TaxLines[0].Rate * 100);
                     if (taxResult.TaxLines[0].TaxDetails != null)
                         foreach (var taxDetail in taxResult.TaxLines[0].TaxDetails)
-                            resultstring.AppendFormat("Jurisdiction: {0}, Tax rate: {1:0.00}%<br />", HttpUtility.HtmlEncode(taxDetail.JurisName), taxDetail.Rate * 100);
+                            resultstring.AppendFormat("Jurisdiction: {0}, Tax rate: {1:0.00}%<br />", WebUtility.HtmlEncode(taxDetail.JurisName), taxDetail.Rate * 100);
                 }
             }
             else
             {
                 resultstring.Append("<font color=\"red\">");
                 foreach (var message in taxResult.Messages)
-                    resultstring.AppendFormat("{0}<br />", HttpUtility.HtmlEncode(message.Summary));
+                    resultstring.AppendFormat("{0}<br />", WebUtility.HtmlEncode(message.Summary));
                 resultstring.Append("</font>");
             }
 
@@ -281,7 +286,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             return View("~/Plugins/Tax.Avalara/Views/Configure.cshtml", model);
         }
 
-        [AcceptVerbs(HttpVerbs.Get)]
+        [AcceptVerbs("Get")]
         public ActionResult GetStatesByCountryId(int countryId)
         {
             //get states and provinces for specified country
@@ -290,19 +295,18 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             if (!states.Any())
                 states.Insert(0, new { id = 0, name = _localizationService.GetResource("Admin.Address.OtherNonUS") });
 
-            return Json(states, JsonRequestBehavior.AllowGet);
+            return Json(states);
         }
         
         [HttpPost]
-        public virtual ActionResult ImportTaxCodes()
+        public virtual ActionResult ImportTaxCodes(IFormFile importexcelfile)
         {
             try
             {
-                var file = Request.Files["importexcelfile"];
-                if (file != null && file.ContentLength > 0)
+                if (importexcelfile != null && importexcelfile.Length > 0)
                 {
                     //import tax codes from the uploaded Excel file
-                    var importedTaxCodeNumber = _avalaraImportManager.ImportTaxCodesFromXlsx(file.InputStream);
+                    var importedTaxCodeNumber = _avalaraImportManager.ImportTaxCodesFromXlsx(importexcelfile.OpenReadStream());
                     SuccessNotification(string.Format(_localizationService.GetResource("Plugins.Tax.Avalara.ImportTaxCodes.Success"), importedTaxCodeNumber));
                 }
                 else

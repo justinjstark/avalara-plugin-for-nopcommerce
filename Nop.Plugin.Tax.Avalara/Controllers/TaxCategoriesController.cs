@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Linq;
-using System.Web.Mvc;
-using Nop.Admin.Controllers;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Tax;
+using Microsoft.AspNetCore.Mvc;
 using Nop.Core;
 using Nop.Core.Domain.Tax;
 using Nop.Plugin.Tax.Avalara.Services;
@@ -12,6 +9,9 @@ using Nop.Services.Security;
 using Nop.Services.Tax;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
+using Nop.Web.Areas.Admin.Controllers;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Tax;
 
 namespace Nop.Plugin.Tax.Avalara.Controllers
 {
@@ -43,7 +43,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         #region Methods
 
-        public virtual ActionResult Categories()
+        public virtual IActionResult Categories()
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
@@ -78,7 +78,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         }
 
         [HttpPost]
-        public virtual ActionResult CategoryUpdate(TaxCategoryModel model)
+        public virtual IActionResult CategoryUpdate(TaxCategoryModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
@@ -102,8 +102,10 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         }
 
         [HttpPost]
-        public virtual ActionResult CategoryAdd([Bind(Exclude = "Id")] TaxCategoryModel model)
+        public virtual IActionResult CategoryAdd(TaxCategoryModel model)
         {
+            ModelState.Remove(nameof(TaxCategoryModel.Id));
+
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
 
@@ -115,8 +117,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             _taxCategoryService.InsertTaxCategory(taxCategory);
 
             //try to get tax code from the model custom properties
-            object systemName;
-            if (model.CustomProperties.TryGetValue("SystemName", out systemName))
+            if (model.CustomProperties.TryGetValue("SystemName", out object systemName))
             {
                 var taxCode = systemName is string[] ? ((string[])systemName).FirstOrDefault() : systemName is string ? (string)systemName : null;
                 _genericAttributeService.SaveAttribute(taxCategory, _avalaraImportManager.AvaTaxCodeAttribute, taxCode);
@@ -126,7 +127,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         }
 
         [HttpPost]
-        public virtual ActionResult CategoryDelete(int id)
+        public virtual IActionResult CategoryDelete(int id)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();

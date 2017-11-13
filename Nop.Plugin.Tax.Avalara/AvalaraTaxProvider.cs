@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web.Routing;
 using Nop.Core;
 using Nop.Core.Caching;
 using Nop.Core.Domain.Catalog;
@@ -61,6 +60,7 @@ namespace Nop.Plugin.Tax.Avalara
         private readonly IStoreContext _storeContext;
         private readonly ITaxCategoryService _taxCategoryService;
         private readonly TaxSettings _taxSettings;
+        private readonly IWebHelper _webHelper;
 
         #endregion
 
@@ -79,7 +79,8 @@ namespace Nop.Plugin.Tax.Avalara
             ISettingService settingService,
             IStoreContext storeContext,
             ITaxCategoryService taxCategoryService,
-            TaxSettings taxSettings)
+            TaxSettings taxSettings,
+            IWebHelper webHelper)
         {
             this._avalaraImportManager = avalaraImportManager;
             this._avalaraTaxSettings = avalaraTaxSettings;
@@ -95,6 +96,7 @@ namespace Nop.Plugin.Tax.Avalara
             this._storeContext = storeContext;
             this._taxCategoryService = taxCategoryService;
             this._taxSettings = taxSettings;
+            this._webHelper = webHelper;
         }
 
         #endregion
@@ -173,8 +175,8 @@ namespace Nop.Plugin.Tax.Avalara
         protected IList<Line> GetItemLines(Order order, IDictionary<string, common.Address> addresses)
         {
             //get destination and origin address codes
-            var destinationCode = addresses["destination"].Return(address => address.Id.ToString(), null);
-            var originCode = addresses["origin"].Return(address => address.Id.ToString(), null);
+            var destinationCode = addresses["destination"]?.Id.ToString();
+            var originCode = addresses["origin"]?.Id.ToString();
 
             //get purchased products details
             var items = CreateLinesForOrderItems(order, destinationCode, originCode).ToList();
@@ -220,18 +222,17 @@ namespace Nop.Plugin.Tax.Avalara
                 if (UseEuVatRules(order, orderItem.Product))
                 {
                     //use the billing address as the destination one in accordance with the EU VAT rules
-                    item.DestinationCode = order.BillingAddress.Return(address => address.Id.ToString(), null);
+                    item.DestinationCode = order.BillingAddress?.Id.ToString();
                 }
 
                 //set SKU as item code
-                item.ItemCode = orderItem.Product.Return(product => product.FormatSku(orderItem.AttributesXml, _productAttributeParser), null);
+                item.ItemCode = orderItem.Product?.FormatSku(orderItem.AttributesXml, _productAttributeParser);
 
                 //item description
-                item.Description = orderItem.Product.Return(product =>
-                    !string.IsNullOrEmpty(product.ShortDescription) ? product.ShortDescription : product.Name, null);
+                item.Description = orderItem.Product?.ShortDescription ?? orderItem.Product?.Name;
 
                 //set tax category as tax code
-                var productTaxCategory = _taxCategoryService.GetTaxCategoryById(orderItem.Product.Return(product => product.TaxCategoryId, 0));
+                var productTaxCategory = _taxCategoryService.GetTaxCategoryById(orderItem.Product?.TaxCategoryId ?? 0);
                 item.TaxCode = GetTaxCodeByTaxCategory(productTaxCategory);
 
                 ////try get product exemption
@@ -241,7 +242,7 @@ namespace Nop.Plugin.Tax.Avalara
                 //as written in AvaTax documentation: You can find ExemptionNo in the GetTaxRequest at the document and line level.
                 //but in fact, when you try to use it on line level you get the error: "Malformed JSON near 'ExemptionNo'"
                 //so set CustomerUsageType to "L" - exempt by nopCommerce reason, it will enable the tax exempt
-                if (orderItem.Product.Return(product => product.IsTaxExempt, false))
+                if (orderItem.Product?.IsTaxExempt ?? false)
                     item.CustomerUsageType = CustomerUsageType.L;
 
                 return item;
@@ -350,11 +351,11 @@ namespace Nop.Plugin.Tax.Avalara
                 var checkoutAttributeItem = new Line
                 {
                     Amount = attributeValue.PriceAdjustment,
-                    Description = string.Format("{0} ({1})", attributeValue.CheckoutAttribute.Name, attributeValue.Name),
+                    Description = $"{attributeValue.CheckoutAttribute.Name} ({attributeValue.Name})",
                     DestinationCode = destinationCode,
                     Discounted = order.OrderSubTotalDiscountExclTax > decimal.Zero,
-                    ItemCode = string.Format("{0}-{1}", attributeValue.CheckoutAttribute.Name, attributeValue.Name),
-                    LineNo = string.Format("Checkout-{0}", attributeValue.CheckoutAttribute.Name),
+                    ItemCode = $"{attributeValue.CheckoutAttribute.Name}-{attributeValue.Name}",
+                    LineNo = $"Checkout-{attributeValue.CheckoutAttribute.Name}",
                     OriginCode = originCode,
                     Qty = 1
                 };
@@ -391,7 +392,7 @@ namespace Nop.Plugin.Tax.Avalara
         {
             //whether EU VAT rules enabled and purchased product belongs to the telecommunications, broadcasting and electronic services
             return _taxSettings.EuVatEnabled
-                && purchasedProduct.Return(product => product.IsTelecommunicationsOrBroadcastingOrElectronicServices, false)
+                && (purchasedProduct?.IsTelecommunicationsOrBroadcastingOrElectronicServices ?? false)
                 && IsEuConsumer(order.Customer, order.BillingAddress);
         }
 
@@ -399,6 +400,7 @@ namespace Nop.Plugin.Tax.Avalara
         /// Get a value indicating whether a customer is consumer located in Europe Union
         /// </summary>
         /// <param name="customer">Customer</param>
+        /// <param name="billingAddress">Billing address</param>
         /// <returns>True if is EU consumer; otherwise false</returns>
         protected virtual bool IsEuConsumer(Customer customer, common.Address billingAddress)
         {
@@ -440,12 +442,12 @@ namespace Nop.Plugin.Tax.Avalara
 
             //customer tax exemption
             if (customer.IsTaxExempt)
-                return CommonHelper.EnsureMaximumLength(string.Format("Exempt-customer-{0}", customer.Id), 25);
+                return CommonHelper.EnsureMaximumLength($"Exempt-customer-{customer.Id}", 25);
 
             //customer role tax exemption
             var exemptRole = customer.CustomerRoles.FirstOrDefault(role => role.Active && role.TaxExempt);
 
-            return exemptRole.Return(role => CommonHelper.EnsureMaximumLength(string.Format("Exempt-{0}", role.Name), 25), null);
+            return exemptRole != null ? CommonHelper.EnsureMaximumLength($"Exempt-{exemptRole.Name}", 25) : null;
         }
 
         /// <summary>
@@ -461,8 +463,8 @@ namespace Nop.Plugin.Tax.Avalara
                 Line1 = address.Address1,
                 Line2 = address.Address2,
                 City = address.City,
-                Region = address.StateProvince.Return(state => state.Abbreviation, null),
-                Country = address.Country.Return(country => country.TwoLetterIsoCode, null),
+                Region = address.StateProvince?.Abbreviation,
+                Country = address.Country?.TwoLetterIsoCode,
                 PostalCode = address.ZipPostalCode
             };
         }
@@ -504,8 +506,8 @@ namespace Nop.Plugin.Tax.Avalara
             var cacheKey = string.Format(TAXRATE_KEY,
                 calculateTaxRequest.Address.Address1,
                 calculateTaxRequest.Address.City,
-                calculateTaxRequest.Address.StateProvince.Return(state => state.Id, 0),
-                calculateTaxRequest.Address.Country.Return(country => country.Id, 0),
+                calculateTaxRequest.Address.StateProvince?.Id ?? 0,
+                calculateTaxRequest.Address.Country?.Id ?? 0,
                 calculateTaxRequest.Address.ZipPostalCode);
 
             // we don't use standard way _cacheManager.Get() due the need write errors to CalculateTaxResult
@@ -517,7 +519,7 @@ namespace Nop.Plugin.Tax.Avalara
             {
                 Client = AvalaraTaxHelper.AVATAX_CLIENT,
                 CompanyCode = _avalaraTaxSettings.CompanyCode,
-                CustomerCode = calculateTaxRequest.Customer.Return(customer => customer.Id.ToString(), null),
+                CustomerCode = calculateTaxRequest.Customer?.Id.ToString(),
                 DetailLevel = DetailLevel.Tax,
                 DocCode = Guid.NewGuid().ToString(),
                 DocType = DocType.SalesOrder
@@ -535,8 +537,8 @@ namespace Nop.Plugin.Tax.Avalara
             var line = new Line
             {
                 LineNo = "1",
-                DestinationCode = calculateTaxRequest.Address.Return(address => address.Id.ToString(), null),
-                OriginCode = originAddress.Return(address => address.Id.ToString(), null)
+                DestinationCode = calculateTaxRequest.Address?.Id.ToString(),
+                OriginCode = originAddress?.Id.ToString()
             };
             taxRequest.Lines = new[] { line };
 
@@ -585,7 +587,7 @@ namespace Nop.Plugin.Tax.Avalara
                 Commit = true,
                 Client = AvalaraTaxHelper.AVATAX_CLIENT,
                 CompanyCode = _avalaraTaxSettings.CompanyCode,
-                CustomerCode = order.Customer.Return(customer => customer.Id.ToString(), null),
+                CustomerCode = order.Customer?.Id.ToString(),
                 CurrencyCode = order.CustomerCurrencyCode,
                 DetailLevel = DetailLevel.Tax,
                 Discount = order.OrderSubTotalDiscountExclTax,
@@ -597,7 +599,7 @@ namespace Nop.Plugin.Tax.Avalara
 
             //set addresses
             var addresses = GetAddressDictionary(order);
-            taxRequest.Addresses = addresses.Values.Distinct().Select(address => CreateAddress(address)).ToArray();
+            taxRequest.Addresses = addresses.Values.Distinct().Select(CreateAddress).ToArray();
 
             //set purchased item lines
             var items = GetItemLines(order, addresses);
@@ -627,17 +629,9 @@ namespace Nop.Plugin.Tax.Avalara
             AvalaraTaxHelper.CancelTaxRequest(cancelRequest, _avalaraTaxSettings, _logger);
         }
 
-        /// <summary>
-        /// Gets a route for provider configuration
-        /// </summary>
-        /// <param name="actionName">Action name</param>
-        /// <param name="controllerName">Controller name</param>
-        /// <param name="routeValues">Route values</param>
-        public void GetConfigurationRoute(out string actionName, out string controllerName, out RouteValueDictionary routeValues)
+        public override string GetConfigurationPageUrl()
         {
-            actionName = "Configure";
-            controllerName = "TaxAvalara";
-            routeValues = new RouteValueDictionary { { "Namespaces", "Nop.Plugin.Tax.Avalara.Controllers" }, { "area", null } };
+            return $"{_webHelper.GetStoreLocation()}Admin/TaxAvalara/Configure";
         }
 
         /// <summary>

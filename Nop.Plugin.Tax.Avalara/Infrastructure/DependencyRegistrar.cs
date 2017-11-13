@@ -1,6 +1,6 @@
-using System.Web.Mvc;
 using Autofac;
 using Autofac.Core;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Nop.Core.Caching;
 using Nop.Core.Configuration;
 using Nop.Core.Infrastructure;

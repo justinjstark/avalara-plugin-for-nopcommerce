@@ -1,9 +1,10 @@
-﻿@model Nop.Plugin.Tax.Avalara.Models.TaxAvalaraModel
-@using Nop.Web.Framework;
+﻿@{
+    Layout = "_ConfigurePlugin";
+}
 
-@using (Html.BeginForm())
-{
-    @Html.AntiForgeryToken()
+@model Nop.Plugin.Tax.Avalara.Models.TaxAvalaraModel
+
+<form asp-controller="TaxAvalara" asp-action="Configure" method="post">
     <div class="panel-group">
         <div class="panel panel-default">
             <div class="panel-body">
@@ -12,7 +13,7 @@
                     <br />
                     1. <a href="https://www.avalara.com" target="_blank">Create an Avalara account</a><br />
                     2. Log in at the <a href="https://admin-avatax.avalara.net/login.aspx" target="_blank">production service</a>
-                       or at the <a href="https://admin-development.avalara.net/login.aspx target=" _blank"> development service</a><br />
+                    or at the <a href="https://admin-development.avalara.net/login.aspx target=" _blank"> development service</a><br />
                     3. Add a company and some nexus jurisdiction selections to get any tax results<br />
                     4. Fill in your Avalara account details below<br />
                     <br />
@@ -22,56 +23,56 @@
                 </p>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.AccountId)
+                        <nop-label asp-for="AccountId" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.AccountId)
-                        @Html.ValidationMessageFor(model => model.AccountId)
+                        <nop-editor asp-for="AccountId" />
+                        <span asp-validation-for="AccountId"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.LicenseKey)
+                        <nop-label asp-for="LicenseKey" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.LicenseKey)
-                        @Html.ValidationMessageFor(model => model.LicenseKey)
+                        <nop-editor asp-for="LicenseKey" />
+                        <span asp-validation-for="LicenseKey"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.CompanyCode)
+                        <nop-label asp-for="CompanyCode" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.CompanyCode)
-                        @Html.ValidationMessageFor(model => model.CompanyCode)
+                        <nop-editor asp-for="CompanyCode" />
+                        <span asp-validation-for="CompanyCode"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.IsSandboxEnvironment)
+                        <nop-label asp-for="IsSandboxEnvironment" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.IsSandboxEnvironment)
-                        @Html.ValidationMessageFor(model => model.IsSandboxEnvironment)
+                        <nop-editor asp-for="IsSandboxEnvironment" />
+                        <span asp-validation-for="IsSandboxEnvironment"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.CommitTransactions)
+                        <nop-label asp-for="CommitTransactions" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.CommitTransactions)
-                        @Html.ValidationMessageFor(model => model.CommitTransactions)
+                        <nop-editor asp-for="CommitTransactions" />
+                        <span asp-validation-for="CommitTransactions"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <div class="col-md-3">
-                        @Html.NopLabelFor(model => model.ValidateAddresses)
+                        <nop-label asp-for="ValidateAddresses" />
                     </div>
                     <div class="col-md-9">
-                        @Html.NopEditorFor(model => model.ValidateAddresses)
-                        @Html.ValidationMessageFor(model => model.ValidateAddresses)
+                        <nop-editor asp-for="ValidateAddresses" />
+                        <span asp-validation-for="ValidateAddresses"></span>
                     </div>
                 </div>
                 <div class="form-group">
@@ -101,9 +102,9 @@
 
                 <script type="text/javascript">
                     $(document).ready(function() {
-                        $("#@Html.FieldIdFor(model => model.TestAddress.CountryId)").change(function(){
+                        $("#@Html.IdFor(model => model.TestAddress.CountryId)").change(function(){
                             var selectedItem = $(this).val();
-                            var ddlStates = $("#@Html.FieldIdFor(model => model.TestAddress.RegionId)");
+                            var ddlStates = $("#@Html.IdFor(model => model.TestAddress.RegionId)");
                             $.ajax({
                                 cache: false,
                                 type: "GET",
@@ -126,47 +127,47 @@
                 <div class="panel-body">
                     <div class="form-group">
                         <div class="col-md-3">
-                            @Html.NopLabelFor(model => model.TestAddress.CountryId)
+                            <nop-label asp-for="TestAddress.CountryId" />
                         </div>
                         <div class="col-md-9">
-                            @Html.NopDropDownListFor(model => model.TestAddress.CountryId, Model.TestAddress.AvailableCountries)
-                            @Html.ValidationMessageFor(model => model.TestAddress.CountryId)
+                            <nop-select asp-for="TestAddress.CountryId" asp-items="Model.TestAddress.AvailableCountries"/>
+                            <span asp-validation-for="TestAddress.CountryId"></span>
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="col-md-3">
-                            @Html.NopLabelFor(model => model.TestAddress.RegionId)
+                            <nop-label asp-for="TestAddress.RegionId" />
                         </div>
                         <div class="col-md-9">
-                            @Html.NopDropDownListFor(model => model.TestAddress.RegionId, Model.TestAddress.AvailableStates)
-                            @Html.ValidationMessageFor(model => model.TestAddress.RegionId)
+                            <nop-select asp-for="TestAddress.RegionId" asp-items="Model.TestAddress.AvailableStates"/>
+                            <span asp-validation-for="TestAddress.RegionId"></span>
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="col-md-3">
-                            @Html.NopLabelFor(model => model.TestAddress.City)
+                            <nop-label asp-for="TestAddress.City" />
                         </div>
                         <div class="col-md-9">
-                            @Html.NopEditorFor(model => model.TestAddress.City)
-                            @Html.ValidationMessageFor(model => model.TestAddress.City)
+                            <nop-editor asp-for="TestAddress.City" />
+                            <span asp-validation-for="TestAddress.City"></span>
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="col-md-3">
-                            @Html.NopLabelFor(model => model.TestAddress.Address)
+                            <nop-label asp-for="TestAddress.Address" />
                         </div>
                         <div class="col-md-9">
-                            @Html.NopEditorFor(model => model.TestAddress.Address)
-                            @Html.ValidationMessageFor(model => model.TestAddress.Address)
+                            <nop-editor asp-for="TestAddress.Address" />
+                            <span asp-validation-for="TestAddress.Address"></span>
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="col-md-3">
-                            @Html.NopLabelFor(model => model.TestAddress.ZipPostalCode)
+                            <nop-label asp-for="TestAddress.ZipPostalCode" />
                         </div>
                         <div class="col-md-9">
-                            @Html.NopEditorFor(model => model.TestAddress.ZipPostalCode)
-                            @Html.ValidationMessageFor(model => model.TestAddress.ZipPostalCode)
+                            <nop-editor asp-for="TestAddress.ZipPostalCode" />
+                            <span asp-validation-for="TestAddress.ZipPostalCode"></span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -201,41 +202,39 @@
             </div>
         </div>
     </div>
-}
+</form>
 
-@*import tax codes form*@
-<div id="importexcel-window" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="importexcel-window-title">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="importexcel-window-title">@T("Admin.Common.ImportFromExcel")</h4>
-            </div>
-            @using (Html.BeginForm("ImportTaxCodes", "TaxAvalara", FormMethod.Post, new { enctype = "multipart/form-data" }))
-            {
-                <div class="form-horizontal">
-                    <div class="modal-body">
-                        @Html.AntiForgeryToken()
-                        <div class="form-group">
-                            <div class="col-md-2">
-                                <div class="label-wrapper">
-                                    <label class="control-label">
-                                        @T("Admin.Common.ExcelFile")
-                                    </label>
+    @*import tax codes form*@
+    <div id="importexcel-window" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="importexcel-window-title">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="importexcel-window-title">@T("Admin.Common.ImportFromExcel")</h4>
+                </div>
+                <form asp-controller="TaxAvalara" asp-action="ImportTaxCodes" method="post">
+                    <div class="form-horizontal">
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <div class="col-md-2">
+                                    <div class="label-wrapper">
+                                        <label class="control-label">
+                                            @T("Admin.Common.ExcelFile")
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-10">
+                                    <input type="file" id="importexcelfile" name="importexcelfile" class="form-control" />
                                 </div>
                             </div>
-                            <div class="col-md-10">
-                                <input type="file" id="importexcelfile" name="importexcelfile" class="form-control" />
-                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="submit" class="btn btn-primary">
+                                @T("Admin.Common.ImportFromExcel")
+                            </button>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary">
-                            @T("Admin.Common.ImportFromExcel")
-                        </button>
-                    </div>
-                </div>
-            }
+                </form>
+            </div>
         </div>
     </div>
-</div>

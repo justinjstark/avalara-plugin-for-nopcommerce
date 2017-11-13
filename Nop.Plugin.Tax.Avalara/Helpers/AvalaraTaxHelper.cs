@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
-using System.Web;
+using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json;
 using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Services.Logging;
@@ -110,16 +110,16 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             var postData = Encoding.Default.GetBytes(JsonConvert.SerializeObject(taxRequest));
 
             //create web request
-            var url = string.Format("{0}1.0/tax/get", GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment));
+            var url = $"{GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment)}1.0/tax/get";
             var request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "POST";
             request.ContentType = "application/json";
             request.ContentLength = postData.Length;
 
             //add authorization header
-            var login = string.Format("{0}:{1}", avalaraTaxSettings.AccountId, avalaraTaxSettings.LicenseKey);
+            var login = $"{avalaraTaxSettings.AccountId}:{avalaraTaxSettings.LicenseKey}";
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
-            request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
+            request.Headers.Add(HttpRequestHeader.Authorization, $"Basic {authorization}");
 
             try
             {
@@ -143,7 +143,7 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
                 {
                     //log error
                     var responseText = streamReader.ReadToEnd();
-                    logger.Error(string.Format("Avalara tax request error: {0}", responseText), ex);
+                    logger.Error($"Avalara tax request error: {responseText}", ex);
 
                     return JsonConvert.DeserializeObject<TaxResponse>(responseText);
                 }
@@ -167,12 +167,12 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
                 return null;
 
             //construct service url (coordinates for 100 Ravine Ln NE Suite 320, Bainbridge Island, WA 98110, US)
-            var url = string.Format("{0}1.0/tax/{1},{2}/get", 
-                GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment), "47.6253857", "-122.5185171");
+            var url =
+                $"{GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment)}1.0/tax/{"47.6253857"},{"-122.5185171"}/get";
 
             //add query parameters
             var uriBuilder = new UriBuilder(url);
-            var query = HttpUtility.ParseQueryString(uriBuilder.Query);
+            var query = QueryHelpers.ParseQuery(uriBuilder.Query);
             query["saleamount"] = "100";
             uriBuilder.Query = query.ToString();
 
@@ -182,9 +182,9 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             request.ContentType = "application/json";
 
             //add authorization header
-            var login = string.Format("{0}:{1}", avalaraTaxSettings.AccountId, avalaraTaxSettings.LicenseKey);
+            var login = $"{avalaraTaxSettings.AccountId}:{avalaraTaxSettings.LicenseKey}";
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
-            request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
+            request.Headers.Add(HttpRequestHeader.Authorization, $"Basic {authorization}");
 
             try
             {
@@ -228,16 +228,16 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             var postData = Encoding.Default.GetBytes(JsonConvert.SerializeObject(cancelRequest));
 
             //create web request
-            var url = string.Format("{0}1.0/tax/cancel", GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment));
+            var url = $"{GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment)}1.0/tax/cancel";
             var request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "POST";
             request.ContentType = "application/json";
             request.ContentLength = postData.Length;
 
             //add authorization header
-            var login = string.Format("{0}:{1}", avalaraTaxSettings.AccountId, avalaraTaxSettings.LicenseKey);
+            var login = $"{avalaraTaxSettings.AccountId}:{avalaraTaxSettings.LicenseKey}";
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
-            request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
+            request.Headers.Add(HttpRequestHeader.Authorization, $"Basic {authorization}");
 
             try
             {
@@ -261,7 +261,7 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
                 {
                     //log error
                     var responseText = streamReader.ReadToEnd();
-                    logger.Error(string.Format("Avalara cancel tax request error: {0}", responseText), ex);
+                    logger.Error($"Avalara cancel tax request error: {responseText}", ex);
 
                     return JsonConvert.DeserializeObject<CancelTaxResponse>(responseText);
                 }
@@ -290,18 +290,18 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             }
 
             //construct service url
-            var url = string.Format("{0}1.0/address/validate", GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment));
+            var url = $"{GetServiceUrl(avalaraTaxSettings.IsSandboxEnvironment)}1.0/address/validate";
 
             //add query parameters
             var uriBuilder = new UriBuilder(url);
-            var query = HttpUtility.ParseQueryString(uriBuilder.Query);
+            var query = QueryHelpers.ParseQuery(uriBuilder.Query);
             query["Line1"] = address.Line1;
             query["Line2"] = address.Line2;
-            query["City"] = address.City;
+             query["City"] = address.City;
             query["Region"] = address.Region;
             query["Country"] = address.Country;
             query["PostalCode"] = address.PostalCode;
-            uriBuilder.Query = HttpUtility.UrlPathEncode(query.ToString());
+            uriBuilder.Query = WebUtility.UrlEncode(query.ToString()) ?? string.Empty;
             
             //create web request
             var request = (HttpWebRequest)WebRequest.Create(uriBuilder.Uri);
@@ -309,9 +309,9 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             request.ContentType = "application/json";
 
             //add authorization header
-            var login = string.Format("{0}:{1}", avalaraTaxSettings.AccountId, avalaraTaxSettings.LicenseKey);
+            var login = $"{avalaraTaxSettings.AccountId}:{avalaraTaxSettings.LicenseKey}";
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
-            request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
+            request.Headers.Add(HttpRequestHeader.Authorization, $"Basic {authorization}");
 
             try
             {
@@ -329,7 +329,7 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
                 {
                     //log error
                     var responseText = streamReader.ReadToEnd();
-                    logger.Error(string.Format("Avalara validate address error: {0}", responseText), ex);
+                    logger.Error($"Avalara validate address error: {responseText}", ex);
 
                     return JsonConvert.DeserializeObject<ValidateAddressResponse>(responseText);
                 }

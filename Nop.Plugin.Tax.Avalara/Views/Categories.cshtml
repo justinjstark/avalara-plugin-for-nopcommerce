@@ -92,7 +92,7 @@
                                 pageable: {
                                     refresh: true,
                                     pageSizes: [@(gridPageSizes)],
-                                    @Html.Partial("_GridPagerMessages")
+                                    @await Html.PartialAsync("_GridPagerMessages")
                                 },
                                 toolbar: [{ name: "create", text: "@T("Admin.Common.AddNewRecord")" }],
                                 editable: {
