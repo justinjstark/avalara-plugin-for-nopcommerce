@@ -1,9 +1,10 @@
 ﻿using Nop.Core.Configuration;
+using Nop.Plugin.Tax.Avalara.Domain;
 
 namespace Nop.Plugin.Tax.Avalara
 {
     /// <summary>
-    /// Represents settings for the Avalara tax provider 
+    /// Represents settings of the Avalara tax provider 
     /// </summary>
     public class AvalaraTaxSettings : ISettings
     {
@@ -25,16 +26,16 @@ namespace Nop.Plugin.Tax.Avalara
         /// <summary>
         /// Gets or sets a value indicating whether to use sandbox (testing environment)
         /// </summary>
-        public bool IsSandboxEnvironment { get; set; }
+        public bool UseSandbox { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to commit tax transactions (recorded in the history on your Avalara account)
+        /// Gets or sets a value indicating whether to commit tax transactions right after they are saved
         /// </summary>
         public bool CommitTransactions { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to validate addresses before tax requesting (only for US or Canadian address)
+        /// Gets or sets a type of the tax origin address
         /// </summary>
-        public bool ValidateAddresses { get; set; }
+        public TaxOriginAddressType TaxOriginAddressType { get; set; }
     }
 }

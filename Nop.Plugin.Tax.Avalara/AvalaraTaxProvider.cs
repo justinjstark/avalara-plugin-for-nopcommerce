@@ -1,102 +1,100 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Avalara.AvaTax.RestClient;
 using Nop.Core;
 using Nop.Core.Caching;
-using Nop.Core.Domain.Catalog;
+using Nop.Core.Domain.Cms;
+using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Orders;
+using Nop.Core.Domain.Shipping;
 using Nop.Core.Domain.Tax;
 using Nop.Core.Plugins;
 using Nop.Plugin.Tax.Avalara.Domain;
-using Nop.Plugin.Tax.Avalara.Helpers;
 using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Catalog;
+using Nop.Services.Cms;
 using Nop.Services.Common;
 using Nop.Services.Configuration;
+using Nop.Services.Customers;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
-using Nop.Services.Logging;
 using Nop.Services.Orders;
 using Nop.Services.Tax;
-using common = Nop.Core.Domain.Common;
 
 namespace Nop.Plugin.Tax.Avalara
 {
     /// <summary>
     /// Represents Avalara tax provider
     /// </summary>
-    public class AvalaraTaxProvider : BasePlugin, ITaxProvider
+    public class AvalaraTaxProvider : BasePlugin, ITaxProvider, IWidgetPlugin
     {
-        #region Constants
-
-        /// <summary>
-        /// Key for caching tax rate for certain address
-        /// </summary>
-        /// <remarks>
-        /// {0} - Address
-        /// {1} - City
-        /// {2} - StateProvinceId
-        /// {3} - CountryId
-        /// {4} - ZipPostalCode
-        /// </remarks>
-        private const string TAXRATE_KEY = "Nop.taxrate.id-{0}-{1}-{2}-{3}-{4}";
-
-        #endregion
-
         #region Fields
 
-        private readonly AvalaraImportManager _avalaraImportManager;
+        private readonly AvalaraTaxManager _avalaraTaxManager;
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
         private readonly IAddressService _addressService;
-        private readonly ICacheManager _cacheManager;
         private readonly ICheckoutAttributeParser _checkoutAttributeParser;
+        private readonly ICheckoutAttributeService _checkoutAttributeService;
         private readonly ICountryService _countryService;
+        private readonly ICustomerService _customerService;
         private readonly IGenericAttributeService _genericAttributeService;
         private readonly IGeoLookupService _geoLookupService;
-        private readonly ILogger _logger;
         private readonly IProductAttributeParser _productAttributeParser;
+        private readonly IProductService _productService;
         private readonly ISettingService _settingService;
-        private readonly IStoreContext _storeContext;
+        private readonly IStaticCacheManager _cacheManager;
         private readonly ITaxCategoryService _taxCategoryService;
-        private readonly TaxSettings _taxSettings;
+        private readonly ITaxService _taxService;
         private readonly IWebHelper _webHelper;
+        private readonly ShippingSettings _shippingSettings;
+        private readonly TaxSettings _taxSettings;
+        private readonly WidgetSettings _widgetSettings;
 
         #endregion
 
         #region Ctor
 
-        public AvalaraTaxProvider(AvalaraImportManager avalaraImportManager, 
+        public AvalaraTaxProvider(AvalaraTaxManager avalaraTaxManager,
             AvalaraTaxSettings avalaraTaxSettings,
             IAddressService addressService,
-            ICacheManager cacheManager,
             ICheckoutAttributeParser checkoutAttributeParser,
+            ICheckoutAttributeService checkoutAttributeService,
             ICountryService countryService,
+            ICustomerService customerService,
             IGenericAttributeService genericAttributeService,
             IGeoLookupService geoLookupService,
-            ILogger logger,
             IProductAttributeParser productAttributeParser,
+            IProductService productService,
             ISettingService settingService,
-            IStoreContext storeContext,
+            IStaticCacheManager cacheManager,
             ITaxCategoryService taxCategoryService,
+            ITaxService taxService,
+            IWebHelper webHelper,
+            ShippingSettings shippingSettings,
             TaxSettings taxSettings,
-            IWebHelper webHelper)
+            WidgetSettings widgetSettings)
         {
-            this._avalaraImportManager = avalaraImportManager;
+            this._avalaraTaxManager = avalaraTaxManager;
             this._avalaraTaxSettings = avalaraTaxSettings;
             this._addressService = addressService;
-            this._cacheManager = cacheManager;
             this._checkoutAttributeParser = checkoutAttributeParser;
+            this._checkoutAttributeService = checkoutAttributeService;
             this._countryService = countryService;
+            this._customerService = customerService;
             this._genericAttributeService = genericAttributeService;
             this._geoLookupService = geoLookupService;
-            this._logger = logger;
             this._productAttributeParser = productAttributeParser;
+            this._productService = productService;
             this._settingService = settingService;
-            this._storeContext = storeContext;
+            this._cacheManager = cacheManager;
             this._taxCategoryService = taxCategoryService;
-            this._taxSettings = taxSettings;
+            this._taxService = taxService;
             this._webHelper = webHelper;
+            this._shippingSettings = shippingSettings;
+            this._taxSettings = taxSettings;
+            this._widgetSettings = widgetSettings;
         }
 
         #endregion
@@ -104,33 +102,149 @@ namespace Nop.Plugin.Tax.Avalara
         #region Utilities
 
         /// <summary>
-        /// Get address dictionary
+        /// Prepare request parameters to get an estimated (not finally calculated) tax 
         /// </summary>
-        /// <param name="order">Order</param>
-        /// <returns>Dictionary of used addresses</returns>
-        protected IDictionary<string, common.Address> GetAddressDictionary(Order order)
+        /// <param name="destinationAddress">Destination tax address</param>
+        /// <param name="customerCode">Customer code</param>
+        /// <returns>Request parameters to create tax transaction</returns>
+        private CreateTransactionModel PrepareEstimatedTaxModel(Address destinationAddress, string customerCode)
         {
-            //get destination address
-            var destinationAddress = GetDestinationAddress(order);
+            //prepare common parameters
+            var transactionModel = PrepareTaxModel(destinationAddress, customerCode, false);
 
-            //add destination, origin and billing addresses to dictionary
-            return new Dictionary<string, common.Address>
+            //create a simplified item line
+            transactionModel.lines.Add(new LineItemModel
             {
-                { "origin", GetOriginAddress(order.StoreId) ?? destinationAddress },
-                { "destination", destinationAddress },
-                { "billing", order.BillingAddress },
-            };
+                amount = 100,
+                quantity = 1
+            });
 
+            return transactionModel;
         }
 
         /// <summary>
-        /// Get a tax destination address
+        /// Prepare request parameters to get a tax for the order
+        /// </summary>
+        /// <param name="order">Order</param>
+        /// <param name="save">Whether to save tax transaction</param>
+        /// <returns>Request parameters to create tax transaction</returns>
+        private CreateTransactionModel PrepareOrderTaxModel(Order order, bool save)
+        {
+            //prepare common parameters
+            var transactionModel = PrepareTaxModel(GetOrderDestinationAddress(order), order.Customer?.Id.ToString(), save);
+
+            //prepare specific order parameters
+            transactionModel.code = CommonHelper.EnsureMaximumLength(save ? order.CustomOrderNumber : order.OrderGuid.ToString(), 50);
+            transactionModel.commit = save && _avalaraTaxSettings.CommitTransactions;
+            transactionModel.discount = order.OrderSubTotalDiscountExclTax;
+            transactionModel.email = CommonHelper.EnsureMaximumLength(order.BillingAddress?.Email, 50);
+
+            //set purchased item lines
+            transactionModel.lines = GetItemLines(order);
+
+            //set whole request tax exemption
+            var exemptedCustomerRole = order.Customer?.CustomerRoles.FirstOrDefault(role => role.Active && role.TaxExempt);
+            if (order.Customer?.IsTaxExempt ?? false)
+                transactionModel.exemptionNo = CommonHelper.EnsureMaximumLength($"Exempt-customer-#{order.Customer.Id}", 25);
+            else if (!string.IsNullOrEmpty(exemptedCustomerRole?.Name))
+                transactionModel.exemptionNo = CommonHelper.EnsureMaximumLength($"Exempt-{exemptedCustomerRole.Name}", 25);
+
+            //whether entity use code is set
+            var entityUseCode = order.Customer?.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute)
+                ?? exemptedCustomerRole?.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute);
+            if (!string.IsNullOrEmpty(entityUseCode))
+                transactionModel.customerUsageType = CommonHelper.EnsureMaximumLength(entityUseCode, 25);
+
+            return transactionModel;
+        }
+
+        /// <summary>
+        /// Prepare common request parameters to get a tax
+        /// </summary>
+        /// <param name="destinationAddress">Destination tax address</param>
+        /// <param name="customerCode">Customer code</param>
+        /// <param name="save">Whether to save tax transaction</param>
+        /// <returns>Request parameters to create tax transaction</returns>
+        private CreateTransactionModel PrepareTaxModel(Address destinationAddress, string customerCode, bool save)
+        {
+            //prepare request parameters
+            var transactionModel = new CreateTransactionModel
+            {
+                addresses = new AddressesModel(),
+                customerCode = CommonHelper.EnsureMaximumLength(customerCode, 50),
+                date = DateTime.UtcNow,
+                lines = new List<LineItemModel>(),
+                type = save ? DocumentType.SalesInvoice : DocumentType.SalesOrder
+            };
+
+            //set company code
+            var companyCode = !string.IsNullOrEmpty(_avalaraTaxSettings.CompanyCode)
+                && !_avalaraTaxSettings.CompanyCode.Equals(Guid.Empty.ToString())
+                ? _avalaraTaxSettings.CompanyCode : null;
+            transactionModel.companyCode = CommonHelper.EnsureMaximumLength(companyCode, 25);
+
+            //set destination and origin addresses
+            transactionModel.addresses = GetModelAddresses(destinationAddress);
+
+            return transactionModel;
+        }
+
+        /// <summary>
+        /// Get tax origin and tax destination addresses
+        /// </summary>
+        /// <param name="destinationAddress">Destination address</param>
+        /// <returns>Addresses</returns>
+        private AddressesModel GetModelAddresses(Address destinationAddress)
+        {
+            var addresses = new AddressesModel();
+
+            //get tax origin address
+            var originAddress = _avalaraTaxSettings.TaxOriginAddressType == TaxOriginAddressType.ShippingOrigin
+                ? _addressService.GetAddressById(_shippingSettings.ShippingOriginAddressId)
+                : _avalaraTaxSettings.TaxOriginAddressType == TaxOriginAddressType.DefaultTaxAddress
+                ? _addressService.GetAddressById(_taxSettings.DefaultTaxAddressId)
+                : null;
+
+            //set destination and origin addresses
+            var shipFromAddress = MapAddress(originAddress);
+            var shipToAddress = MapAddress(destinationAddress);
+            if (shipFromAddress != null && shipToAddress != null)
+            {
+                addresses.shipFrom = shipFromAddress;
+                addresses.shipTo = shipToAddress;
+            }
+            else
+                addresses.singleLocation = shipToAddress ?? shipFromAddress;
+
+            return addresses;
+        }
+
+        /// <summary>
+        /// Map nopCommerce address to Avalara model address info
+        /// </summary>
+        /// <param name="address">Address</param>
+        /// <returns>Address info</returns>
+        private AddressLocationInfo MapAddress(Address address)
+        {
+            return address == null ? null : new AddressLocationInfo
+            {
+                city = CommonHelper.EnsureMaximumLength(address.City, 50),
+                country = CommonHelper.EnsureMaximumLength(address.Country?.TwoLetterIsoCode, 2),
+                line1 = CommonHelper.EnsureMaximumLength(address.Address1, 50),
+                line2 = CommonHelper.EnsureMaximumLength(address.Address2, 100),
+                postalCode = CommonHelper.EnsureMaximumLength(address.ZipPostalCode, 11),
+                region = CommonHelper.EnsureMaximumLength(address.StateProvince?.Abbreviation, 3)
+            };
+        }
+
+        /// <summary>
+        /// Get a tax destination address of the passed order
         /// </summary>
         /// <param name="order">Order</param>
         /// <returns>Address</returns>
-        protected common.Address GetDestinationAddress(Order order)
+        private Address GetOrderDestinationAddress(Order order)
         {
-            common.Address destinationAddress = null;
+            Address destinationAddress = null;
 
             //tax is based on billing address
             if (_taxSettings.TaxBasedOn == TaxBasedOn.BillingAddress)
@@ -152,195 +266,165 @@ namespace Nop.Plugin.Tax.Avalara
         }
 
         /// <summary>
-        /// Get a tax origin address
-        /// </summary>
-        /// <param name="storeId">Store identifier</param>
-        /// <returns>Address</returns>
-        protected common.Address GetOriginAddress(int storeId)
-        {
-            //load settings for shipping origin address identifier
-            var originAddressId = _settingService.GetSettingByKey<int>("ShippingSettings.ShippingOriginAddressId",
-                storeId: storeId, loadSharedValueIfNotFound: true);
-
-            //try get address that will be used for tax origin 
-            return _addressService.GetAddressById(originAddressId);
-        }
-
-        /// <summary>
-        /// Get item lines for the tax request
+        /// Get item lines to create tax transaction
         /// </summary>
         /// <param name="order">Order</param>
-        /// <param name="addresses">Address dictionary</param>
         /// <returns>List of item lines</returns>
-        protected IList<Line> GetItemLines(Order order, IDictionary<string, common.Address> addresses)
+        private List<LineItemModel> GetItemLines(Order order)
         {
-            //get destination and origin address codes
-            var destinationCode = addresses["destination"]?.Id.ToString();
-            var originCode = addresses["origin"]?.Id.ToString();
-
             //get purchased products details
-            var items = CreateLinesForOrderItems(order, destinationCode, originCode).ToList();
+            var items = CreateLinesForOrderItems(order).ToList();
 
             //set payment method additional fee as the separate item line
             if (order.PaymentMethodAdditionalFeeExclTax > decimal.Zero)
-                items.Add(CreateLineForPaymentMethod(order, destinationCode, originCode));
+                items.Add(CreateLineForPaymentMethod(order));
 
             //set shipping rate as the separate item line
             if (order.OrderShippingExclTax > decimal.Zero)
-                items.Add(CreateLineForShipping(order, destinationCode, originCode));
+                items.Add(CreateLineForShipping(order));
 
             //set checkout attributes as the separate item lines
             if (!string.IsNullOrEmpty(order.CheckoutAttributesXml))
-                items.AddRange(CreateLinesForCheckoutAttributes(order, destinationCode, originCode));
+                items.AddRange(CreateLinesForCheckoutAttributes(order));
 
             return items;
         }
 
         /// <summary>
-        /// Create item lines for the tax request from order items
+        /// Create item lines for purchased order items
         /// </summary>
         /// <param name="order">Order</param>
-        /// <param name="destinationCode">Destination address code</param>
-        /// <param name="originCode">Origin address code</param>
         /// <returns>Collection of item lines</returns>
-        protected IEnumerable<Line> CreateLinesForOrderItems(Order order, string destinationCode, string originCode)
+        private IEnumerable<LineItemModel> CreateLinesForOrderItems(Order order)
         {
             return order.OrderItems.Select(orderItem =>
             {
-                //create line
-                var item = new Line
+                var item = new LineItemModel
                 {
-                    Amount = orderItem.PriceExclTax,
-                    DestinationCode = destinationCode,
-                    Discounted = order.OrderSubTotalDiscountExclTax > decimal.Zero,
-                    LineNo = orderItem.Id.ToString(),
-                    OriginCode = originCode,
-                    Qty = orderItem.Quantity
+                    amount = orderItem.PriceExclTax,
+
+                    //item description
+                    description = CommonHelper.EnsureMaximumLength(orderItem.Product?.ShortDescription ?? orderItem.Product?.Name, 2096),
+
+                    //whether the discount to the item was applied
+                    discounted = order.OrderSubTotalDiscountExclTax > decimal.Zero,
+
+                    //product exemption
+                    exemptionCode = orderItem.Product?.IsTaxExempt ?? false
+                        ? CommonHelper.EnsureMaximumLength($"Exempt-product-#{orderItem.Product.Id}", 25) : null,
+
+                    //set SKU as item code
+                    itemCode = CommonHelper.EnsureMaximumLength(orderItem.Product?.FormatSku(orderItem.AttributesXml, _productAttributeParser), 50),
+
+                    quantity = orderItem.Quantity
                 };
 
-                //whether to override destination address code
-                if (UseEuVatRules(order, orderItem.Product))
+                //force to use billing address as the destination one in the accordance with EU VAT rules (if enabled)
+                var useEuVatRules = _taxSettings.EuVatEnabled
+                    && (orderItem.Product?.IsTelecommunicationsOrBroadcastingOrElectronicServices ?? false)
+                    && ((order.BillingAddress.Country
+                        ?? _countryService.GetCountryById(order.Customer.GetAttribute<int>(SystemCustomerAttributeNames.CountryId))
+                        ?? _countryService.GetCountryByTwoLetterIsoCode(_geoLookupService.LookupCountryIsoCode(order.Customer.LastIpAddress)))
+                        ?.SubjectToVat ?? false)
+                    && order.Customer.GetAttribute<int>(SystemCustomerAttributeNames.VatNumberStatusId) != (int)VatNumberStatus.Valid;
+                if (useEuVatRules)
                 {
-                    //use the billing address as the destination one in accordance with the EU VAT rules
-                    item.DestinationCode = order.BillingAddress?.Id.ToString();
+                    var destinationAddress = MapAddress(order.BillingAddress);
+                    if (destinationAddress != null)
+                        item.addresses = new AddressesModel { shipTo = destinationAddress };
                 }
 
-                //set SKU as item code
-                item.ItemCode = orderItem.Product?.FormatSku(orderItem.AttributesXml, _productAttributeParser);
-
-                //item description
-                item.Description = orderItem.Product?.ShortDescription ?? orderItem.Product?.Name;
-
-                //set tax category as tax code
+                //set tax code
                 var productTaxCategory = _taxCategoryService.GetTaxCategoryById(orderItem.Product?.TaxCategoryId ?? 0);
-                item.TaxCode = GetTaxCodeByTaxCategory(productTaxCategory);
+                item.taxCode = CommonHelper.EnsureMaximumLength(productTaxCategory?.Name, 25);
 
-                ////try get product exemption
-                //item.ExemptionNo = orderItem.Product != null && orderItem.Product.IsTaxExempt
-                //    ? string.Format("Product-{0}", orderItem.Product.Id) : null;
-
-                //as written in AvaTax documentation: You can find ExemptionNo in the GetTaxRequest at the document and line level.
-                //but in fact, when you try to use it on line level you get the error: "Malformed JSON near 'ExemptionNo'"
-                //so set CustomerUsageType to "L" - exempt by nopCommerce reason, it will enable the tax exempt
-                if (orderItem.Product?.IsTaxExempt ?? false)
-                    item.CustomerUsageType = CustomerUsageType.L;
+                //whether entity use code is set
+                var entityUseCode = orderItem.Product?.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute);
+                if (!string.IsNullOrEmpty(entityUseCode))
+                    item.customerUsageType = CommonHelper.EnsureMaximumLength(entityUseCode, 25);
 
                 return item;
             });
         }
 
         /// <summary>
-        /// Create item line for the tax request from payment method additional fee
+        /// Create a separate item line for the order payment method additional fee
         /// </summary>
         /// <param name="order">Order</param>
-        /// <param name="destinationCode">Destination address code</param>
-        /// <param name="originCode">Origin address code</param>
         /// <returns>Item line</returns>
-        protected Line CreateLineForPaymentMethod(Order order, string destinationCode, string originCode)
+        private LineItemModel CreateLineForPaymentMethod(Order order)
         {
-            //create line
-            var paymentItem = new Line
+            var paymentItem = new LineItemModel
             {
-                Amount = order.PaymentMethodAdditionalFeeExclTax,
-                Description = "Payment method additional fee",
-                DestinationCode = destinationCode,
-                ItemCode = order.PaymentMethodSystemName,
-                LineNo = "payment",
-                OriginCode = originCode,
-                Qty = 1
+                amount = order.PaymentMethodAdditionalFeeExclTax,
+
+                //item description
+                description = "Payment method additional fee",
+
+                //set payment method system name as item code
+                itemCode = CommonHelper.EnsureMaximumLength(order.PaymentMethodSystemName, 50),
+
+                quantity = 1
             };
 
             //whether payment is taxable
             if (_taxSettings.PaymentMethodAdditionalFeeIsTaxable)
             {
-                //try get tax code
+                //try to get tax code
                 var paymentTaxCategory = _taxCategoryService.GetTaxCategoryById(_taxSettings.PaymentMethodAdditionalFeeTaxClassId);
-                paymentItem.TaxCode = GetTaxCodeByTaxCategory(paymentTaxCategory);
+                paymentItem.taxCode = CommonHelper.EnsureMaximumLength(paymentTaxCategory?.Name, 25);
             }
             else
             {
-                //if payment was already taxed, set as exempt
-                //paymentItem.ExemptionNo = "Payment-fee";
-
-                //as written in AvaTax documentation: You can find ExemptionNo in the GetTaxRequest at the document and line level.
-                //but in fact, when you try to use it on line level you get the error: "Malformed JSON near 'ExemptionNo'"
-                //so set CustomerUsageType to "L" - exempt by nopCommerce reason, it will enable the tax exempt
-                paymentItem.CustomerUsageType = CustomerUsageType.L;
+                //if payment is non-taxable, set it as exempt
+                paymentItem.exemptionCode = "Payment-fee-non-taxable";
             }
 
             return paymentItem;
         }
 
         /// <summary>
-        /// Create item line for the tax request from shipping rate
+        /// Create a separate item line for the order shipping charge
         /// </summary>
         /// <param name="order">Order</param>
-        /// <param name="destinationCode">Destination address code</param>
-        /// <param name="originCode">Origin address code</param>
         /// <returns>Item line</returns>
-        protected Line CreateLineForShipping(Order order, string destinationCode, string originCode)
+        private LineItemModel CreateLineForShipping(Order order)
         {
-            //create line
-            var shippingItem = new Line
+            var shippingItem = new LineItemModel
             {
-                Amount = order.OrderShippingExclTax,
-                Description = "Shipping rate",
-                DestinationCode = destinationCode,
-                ItemCode = order.ShippingMethod,
-                LineNo = "shipping",
-                OriginCode = originCode,
-                Qty = 1
+                amount = order.OrderShippingExclTax,
+
+                //item description
+                description = "Shipping rate",
+
+                //set shipping method name as item code
+                itemCode = CommonHelper.EnsureMaximumLength(order.ShippingMethod, 50),
+
+                quantity = 1
             };
 
             //whether shipping is taxable
             if (_taxSettings.ShippingIsTaxable)
             {
-                //try get tax code
+                //try to get tax code
                 var shippingTaxCategory = _taxCategoryService.GetTaxCategoryById(_taxSettings.ShippingTaxClassId);
-                shippingItem.TaxCode = GetTaxCodeByTaxCategory(shippingTaxCategory);
+                shippingItem.taxCode = CommonHelper.EnsureMaximumLength(shippingTaxCategory?.Name, 25);
             }
             else
             {
-                //if shipping was already taxed, set as exempt
-                //shippingItem.ExemptionNo = "Shipping-rate";
-
-                //as written in AvaTax documentation: You can find ExemptionNo in the GetTaxRequest at the document and line level.
-                //but in fact, when you try to use it on line level you get the error: "Malformed JSON near 'ExemptionNo'"
-                //so set CustomerUsageType to "L" - exempt by nopCommerce reason, it will enable the tax exempt
-                shippingItem.CustomerUsageType = CustomerUsageType.L;
+                //if shipping is non-taxable, set it as exempt
+                shippingItem.exemptionCode = "Shipping-rate-non-taxable";
             }
 
             return shippingItem;
         }
 
         /// <summary>
-        /// Create item lines for the tax request from checkout attributes
+        /// Create item lines for order checkout attributes
         /// </summary>
         /// <param name="order">Order</param>
-        /// <param name="destinationCode">Destination address code</param>
-        /// <param name="originCode">Origin address code</param>
         /// <returns>Collection of item lines</returns>
-        protected IEnumerable<Line> CreateLinesForCheckoutAttributes(Order order, string destinationCode, string originCode)
+        private IEnumerable<LineItemModel> CreateLinesForCheckoutAttributes(Order order)
         {
             //get checkout attributes values
             var attributeValues = _checkoutAttributeParser.ParseCheckoutAttributeValues(order.CheckoutAttributesXml);
@@ -348,144 +432,39 @@ namespace Nop.Plugin.Tax.Avalara
             return attributeValues.Where(attributeValue => attributeValue.CheckoutAttribute != null).Select(attributeValue =>
             {
                 //create line
-                var checkoutAttributeItem = new Line
+                var checkoutAttributeItem = new LineItemModel
                 {
-                    Amount = attributeValue.PriceAdjustment,
-                    Description = $"{attributeValue.CheckoutAttribute.Name} ({attributeValue.Name})",
-                    DestinationCode = destinationCode,
-                    Discounted = order.OrderSubTotalDiscountExclTax > decimal.Zero,
-                    ItemCode = $"{attributeValue.CheckoutAttribute.Name}-{attributeValue.Name}",
-                    LineNo = $"Checkout-{attributeValue.CheckoutAttribute.Name}",
-                    OriginCode = originCode,
-                    Qty = 1
+                    amount = attributeValue.PriceAdjustment,
+
+                    //item description
+                    description = CommonHelper.EnsureMaximumLength($"{attributeValue.CheckoutAttribute.Name} ({attributeValue.Name})", 2096),
+
+                    //whether the discount to the item was applied
+                    discounted = order.OrderSubTotalDiscountExclTax > decimal.Zero,
+
+                    //set checkout attribute name and value as item code
+                    itemCode = CommonHelper.EnsureMaximumLength($"{attributeValue.CheckoutAttribute.Name}-{attributeValue.Name}", 50),
+
+                    quantity = 1
                 };
 
                 //whether checkout attribute is tax exempt
                 if (attributeValue.CheckoutAttribute.IsTaxExempt)
-                {
-                    //set item as exempt
-                    //checkoutAttributeItem.ExemptionNo = "Checkout-attribute";
-
-                    //as written in AvaTax documentation: You can find ExemptionNo in the GetTaxRequest at the document and line level.
-                    //but in fact, when you try to use it on line level you get the error: "Malformed JSON near 'ExemptionNo'"
-                    //so set CustomerUsageType to "L" - exempt by nopCommerce reason, it will enable the tax exempt
-                    checkoutAttributeItem.CustomerUsageType = CustomerUsageType.L;
-                }
+                    checkoutAttributeItem.exemptionCode = "Attribute-non-taxable";
                 else
-                { 
-                    //try get tax code
+                {
+                    //or try to get tax code
                     var attributeTaxCategory = _taxCategoryService.GetTaxCategoryById(attributeValue.CheckoutAttribute.TaxCategoryId);
-                    checkoutAttributeItem.TaxCode = GetTaxCodeByTaxCategory(attributeTaxCategory);
+                    checkoutAttributeItem.taxCode = CommonHelper.EnsureMaximumLength(attributeTaxCategory?.Name, 25);
                 }
+
+                //whether entity use code is set
+                var entityUseCode = attributeValue.CheckoutAttribute.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute);
+                if (!string.IsNullOrEmpty(entityUseCode))
+                    checkoutAttributeItem.customerUsageType = CommonHelper.EnsureMaximumLength(entityUseCode, 25);
 
                 return checkoutAttributeItem;
             });
-        }
-
-        /// <summary>
-        /// Get a value whether need to use European Union VAT rules for tax calculation
-        /// </summary>
-        /// <param name="order">Order</param>
-        /// <param name="purchasedProduct">Purchased product</param>
-        /// <returns>True if need to use EU VAT rules; otherwise false</returns>
-        protected bool UseEuVatRules(Order order, Product purchasedProduct)
-        {
-            //whether EU VAT rules enabled and purchased product belongs to the telecommunications, broadcasting and electronic services
-            return _taxSettings.EuVatEnabled
-                && (purchasedProduct?.IsTelecommunicationsOrBroadcastingOrElectronicServices ?? false)
-                && IsEuConsumer(order.Customer, order.BillingAddress);
-        }
-
-        /// <summary>
-        /// Get a value indicating whether a customer is consumer located in Europe Union
-        /// </summary>
-        /// <param name="customer">Customer</param>
-        /// <param name="billingAddress">Billing address</param>
-        /// <returns>True if is EU consumer; otherwise false</returns>
-        protected virtual bool IsEuConsumer(Customer customer, common.Address billingAddress)
-        {
-            //get country from billing address
-            var country = billingAddress.Country;
-
-            //get country specified during registration?
-            if (country == null)
-                country = _countryService.GetCountryById(customer.GetAttribute<int>(SystemCustomerAttributeNames.CountryId));
-
-            //get country by IP address
-            if (country == null)
-                country = _countryService.GetCountryByTwoLetterIsoCode(_geoLookupService.LookupCountryIsoCode(customer.LastIpAddress));
-
-            //we cannot detect country
-            if (country == null)
-                return false;
-
-            //outside EU
-            if (!country.SubjectToVat)
-                return false;
-
-            //company (business) or consumer?
-            if ((VatNumberStatus)customer.GetAttribute<int>(SystemCustomerAttributeNames.VatNumberStatusId) == VatNumberStatus.Valid)
-                return false;
-
-            return true;
-        }
-
-        /// <summary>
-        /// Get a whole request tax exeption
-        /// </summary>
-        /// <param name="customer">Customer</param>
-        /// <returns>Exemption reason</returns>
-        protected string GetRequestExemption(Customer customer)
-        {
-            if (customer == null)
-                return null;
-
-            //customer tax exemption
-            if (customer.IsTaxExempt)
-                return CommonHelper.EnsureMaximumLength($"Exempt-customer-{customer.Id}", 25);
-
-            //customer role tax exemption
-            var exemptRole = customer.CustomerRoles.FirstOrDefault(role => role.Active && role.TaxExempt);
-
-            return exemptRole != null ? CommonHelper.EnsureMaximumLength($"Exempt-{exemptRole.Name}", 25) : null;
-        }
-
-        /// <summary>
-        /// Create the address for request from address entity
-        /// </summary>
-        /// <param name="address">Address entity</param>
-        /// <returns>Address</returns>
-        protected Address CreateAddress(common.Address address)
-        {
-            return new Address
-            {
-                AddressCode = address.Id.ToString(),
-                Line1 = address.Address1,
-                Line2 = address.Address2,
-                City = address.City,
-                Region = address.StateProvince?.Abbreviation,
-                Country = address.Country?.TwoLetterIsoCode,
-                PostalCode = address.ZipPostalCode
-            };
-        }
-
-        /// <summary>
-        /// Get tax code of the passed tax category
-        /// </summary>
-        /// <param name="taxCategory">Tax category</param>
-        /// <returns>Tax code</returns>
-        protected string GetTaxCodeByTaxCategory(TaxCategory taxCategory)
-        {
-            if (taxCategory == null)
-                return null;
-
-            //try to get tax code from the previously saved attribute
-            var taxCode = taxCategory.GetAttribute<string>(_avalaraImportManager.AvaTaxCodeAttribute);
-            if (!string.IsNullOrEmpty(taxCode))
-                return taxCode;
-
-            //or use the name as tax code
-            return taxCategory.Name;
         }
 
         #endregion
@@ -503,135 +482,182 @@ namespace Nop.Plugin.Tax.Avalara
                 return new CalculateTaxResult { Errors = new[] { "Address is not set" } };
 
             //construct a cache key
-            var cacheKey = string.Format(TAXRATE_KEY,
+            var cacheKey = string.Format(AvalaraTaxDefaults.TaxRateCacheKey,
                 calculateTaxRequest.Address.Address1,
                 calculateTaxRequest.Address.City,
                 calculateTaxRequest.Address.StateProvince?.Id ?? 0,
                 calculateTaxRequest.Address.Country?.Id ?? 0,
                 calculateTaxRequest.Address.ZipPostalCode);
 
-            // we don't use standard way _cacheManager.Get() due the need write errors to CalculateTaxResult
+            //we don't use standard way _cacheManager.Get() due the need write errors to CalculateTaxResult
             if (_cacheManager.IsSet(cacheKey))
                 return new CalculateTaxResult { TaxRate = _cacheManager.Get<decimal>(cacheKey) };
 
-            //create a simplified tax request (only for get and the further use of tax rate)
-            var taxRequest = new TaxRequest
-            {
-                Client = AvalaraTaxHelper.AVATAX_CLIENT,
-                CompanyCode = _avalaraTaxSettings.CompanyCode,
-                CustomerCode = calculateTaxRequest.Customer?.Id.ToString(),
-                DetailLevel = DetailLevel.Tax,
-                DocCode = Guid.NewGuid().ToString(),
-                DocType = DocType.SalesOrder
-            };
-
-            //set destination and origin addresses
-            var originAddress = GetOriginAddress(_storeContext.CurrentStore.Id) ?? calculateTaxRequest.Address;
-            taxRequest.Addresses = new[]
-            {
-                CreateAddress(originAddress),
-                CreateAddress(calculateTaxRequest.Address)
-            };
-
-            //create a simplified item line
-            var line = new Line
-            {
-                LineNo = "1",
-                DestinationCode = calculateTaxRequest.Address?.Id.ToString(),
-                OriginCode = originAddress?.Id.ToString()
-            };
-            taxRequest.Lines = new[] { line };
-
-            //get response
-            var result = AvalaraTaxHelper.PostTaxRequest(taxRequest, _avalaraTaxSettings, _logger);
-            if (result == null)
-                return new CalculateTaxResult { Errors = new[] { "Bad request" } };
-            
-            //there are any errors
-            if (result.ResultCode != SeverityLevel.Success)
-                return new CalculateTaxResult { Errors = result.Messages.Select(message => message.Summary).ToList() };
-
-            if (result.TaxLines == null || !result.TaxLines.Any())
-                return new CalculateTaxResult { Errors = new[] { "Tax rates were not received" } };
+            //get estimated tax
+            var totalTax = GetEstimatedTax(calculateTaxRequest.Address, calculateTaxRequest.Customer?.Id.ToString());
+            if (!totalTax.HasValue)
+                return new CalculateTaxResult { Errors = new[] { "No response from the service" }.ToList() };
 
             //tax rate successfully received, so cache it
-            var taxRate = result.TaxLines[0].Rate * 100;
-            _cacheManager.Set(cacheKey, taxRate, 60);
+            _cacheManager.Set(cacheKey, totalTax.Value, 60);
 
-            return new CalculateTaxResult { TaxRate = taxRate };
+            return new CalculateTaxResult { TaxRate = totalTax.Value };
         }
 
         /// <summary>
-        /// Commit tax request to save it on AvaTax account history 
+        /// Create tax transaction to get estimated (not finally calculated) tax
         /// </summary>
-        /// <param name="order">Order</param>
-        public void CommitTaxRequest(Order order)
+        /// <param name="destinationAddress">Destination tax address</param>
+        /// <param name="customerCode">Customer code</param>
+        /// <returns>Transaction</returns>
+        public TransactionModel CreateEstimatedTaxTransaction(Address destinationAddress, string customerCode)
         {
-            GetTax(order, true);
+            var transactionModel = PrepareEstimatedTaxModel(destinationAddress, customerCode);
+            return _avalaraTaxManager.CreateTaxTransaction(transactionModel);
         }
 
         /// <summary>
-        /// Get tax details for the placed order
+        /// Get estimated tax total
+        /// </summary>
+        /// <param name="destinationAddress">Destination tax address</param>
+        /// <param name="customerCode">Customer code</param>
+        /// <returns>Tax total</returns>
+        public decimal? GetEstimatedTax(Address destinationAddress, string customerCode)
+        {
+            return CreateEstimatedTaxTransaction(destinationAddress, customerCode)?.totalTax;
+        }
+
+        /// <summary>
+        /// Create tax transaction to get tax for the order
         /// </summary>
         /// <param name="order">Order</param>
-        /// <param name="commit">Whether to commit tax request (record on the AvaTax account history)</param>
-        /// <returns>Tax details</returns>
-        public TaxResponse GetTax(Order order, bool commit)
+        /// <param name="save">Whether to save tax transaction</param>
+        /// <returns>Transaction</returns>
+        public TransactionModel CreateOrderTaxTransaction(Order order, bool save = true)
         {
-            if (order.BillingAddress == null)
-                return null;
+            var transactionModel = PrepareOrderTaxModel(order, save);
+            return _avalaraTaxManager.CreateTaxTransaction(transactionModel);
+        }
 
-            //create tax request
-            var taxRequest = new TaxRequest
+        /// <summary>
+        /// Get order tax total
+        /// </summary>
+        /// <param name="order">Order</param>
+        /// <returns>tax total</returns>
+        public decimal? GetOrderTax(Order order)
+        {
+            return CreateOrderTaxTransaction(order, false)?.totalTax;
+        }
+
+        /// <summary>
+        /// Void tax transaction
+        /// </summary>
+        /// <param name="order">Order</param>
+        public void VoidTaxTransaction(Order order)
+        {
+            _avalaraTaxManager.VoidTax(new VoidTransactionModel
             {
-                Commit = true,
-                Client = AvalaraTaxHelper.AVATAX_CLIENT,
-                CompanyCode = _avalaraTaxSettings.CompanyCode,
-                CustomerCode = order.Customer?.Id.ToString(),
-                CurrencyCode = order.CustomerCurrencyCode,
-                DetailLevel = DetailLevel.Tax,
-                Discount = order.OrderSubTotalDiscountExclTax,
-                DocCode = commit ? order.CustomOrderNumber : order.OrderGuid.ToString(),
-                DocType = commit && _avalaraTaxSettings.CommitTransactions ? DocType.SalesInvoice : DocType.SalesOrder,
-                DocDate = DateTime.UtcNow.ToString("yyyy-MM-dd"),
-                PurchaseOrderNo = commit ? order.CustomOrderNumber : order.OrderGuid.ToString()
+                code = VoidReasonCode.DocVoided
+            }, order.CustomOrderNumber);
+        }
+
+        /// <summary>
+        /// Delete tax transaction
+        /// </summary>
+        /// <param name="order">Order</param>
+        public void DeleteTaxTransaction(Order order)
+        {
+            _avalaraTaxManager.VoidTax(new VoidTransactionModel
+            {
+                code = VoidReasonCode.DocDeleted
+            }, order.CustomOrderNumber);
+        }
+
+        /// <summary>
+        /// Refund tax transaction
+        /// </summary>
+        /// <param name="order">Order</param>
+        /// <param name="amountToRefund">Amount to refund</param>
+        public void RefundTaxTransaction(Order order, decimal amountToRefund)
+        {
+            //first try to get saved tax transaction
+            var transaction = _avalaraTaxManager.GetTransaction(order.CustomOrderNumber);
+
+            //create request parameters to refund transaction
+            var refundTransaction = new RefundTransactionModel
+            {
+                referenceCode = CommonHelper.EnsureMaximumLength(transaction.code, 50),
+                refundDate = transaction.date,
+                refundType = RefundType.Full
             };
 
-            //set addresses
-            var addresses = GetAddressDictionary(order);
-            taxRequest.Addresses = addresses.Values.Distinct().Select(CreateAddress).ToArray();
+            //whether refund is partial
+            var isPartialRefund = amountToRefund < order.OrderTotal;
+            if (isPartialRefund)
+            {
+                refundTransaction.refundType = RefundType.Percentage;
+                refundTransaction.refundPercentage = amountToRefund / (order.OrderTotal - order.OrderTax) * 100;
+            }
 
-            //set purchased item lines
-            var items = GetItemLines(order, addresses);
-            taxRequest.Lines = items.ToArray();
-
-            //set whole request tax exemption
-            taxRequest.ExemptionNo = GetRequestExemption(order.Customer);
-
-            return AvalaraTaxHelper.PostTaxRequest(taxRequest, _avalaraTaxSettings, _logger);
+            _avalaraTaxManager.RefundTax(refundTransaction, transaction.code);
         }
 
         /// <summary>
-        /// Void or delete an existing transaction record from the AvaTax system. 
+        /// Gets a configuration page URL
         /// </summary>
-        /// <param name="order">Order</param>
-        /// <param name="deleted">Whether order was deleted</param>
-        public void VoidTaxRequest(Order order, bool deleted)
-        {
-            var cancelRequest = new CancelTaxRequest
-            {
-                CancelCode = deleted ? CancelReason.DocDeleted : CancelReason.DocVoided,
-                CompanyCode= _avalaraTaxSettings.CompanyCode,
-                DocCode = order.CustomOrderNumber,
-                DocType = DocType.SalesInvoice
-            };
-
-            AvalaraTaxHelper.CancelTaxRequest(cancelRequest, _avalaraTaxSettings, _logger);
-        }
-
         public override string GetConfigurationPageUrl()
         {
-            return $"{_webHelper.GetStoreLocation()}Admin/TaxAvalara/Configure";
+            return $"{_webHelper.GetStoreLocation()}Admin/AvalaraTax/Configure";
+        }
+
+        /// <summary>
+        /// Gets widget zones where this widget should be rendered
+        /// </summary>
+        /// <returns>Widget zones</returns>
+        public IList<string> GetWidgetZones()
+        {
+            return new List<string>
+            {
+                AvalaraTaxDefaults.CustomerDetailsWidgetZone,
+                AvalaraTaxDefaults.CustomerRoleDetailsWidgetZone,
+                AvalaraTaxDefaults.ProductDetailsWidgetZone,
+                AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone,
+                AvalaraTaxDefaults.TaxSettingsWidgetZone,
+                AvalaraTaxDefaults.ProductListButtonsWidgetZone,
+                AvalaraTaxDefaults.TaxCategoriesButtonsWidgetZone
+            };
+        }
+
+        /// <summary>
+        /// Gets a view component for displaying plugin in public store
+        /// </summary>
+        /// <param name="widgetZone">Name of the widget zone</param>
+        /// <param name="viewComponentName">View component name</param>
+        public void GetPublicViewComponent(string widgetZone, out string viewComponentName)
+        {
+            switch (widgetZone)
+            {
+                case AvalaraTaxDefaults.CustomerDetailsWidgetZone:
+                case AvalaraTaxDefaults.CustomerRoleDetailsWidgetZone:
+                case AvalaraTaxDefaults.ProductDetailsWidgetZone:
+                case AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone:
+                    viewComponentName = AvalaraTaxDefaults.EntityUseCodeViewComponentName;
+                    return;
+
+                case AvalaraTaxDefaults.TaxSettingsWidgetZone:
+                    viewComponentName = AvalaraTaxDefaults.TaxOriginViewComponentName;
+                    return;
+
+                case AvalaraTaxDefaults.ProductListButtonsWidgetZone:
+                    viewComponentName = AvalaraTaxDefaults.ExportItemsViewComponentName;
+                    return;
+
+                case AvalaraTaxDefaults.TaxCategoriesButtonsWidgetZone:
+                    viewComponentName = AvalaraTaxDefaults.TaxCodesViewComponentName;
+                    return;
+            }
+
+            viewComponentName = null;
         }
 
         /// <summary>
@@ -642,32 +668,56 @@ namespace Nop.Plugin.Tax.Avalara
             //settings
             _settingService.SaveSetting(new AvalaraTaxSettings
             {
-                CompanyCode = "APITrialCompany",
-                IsSandboxEnvironment = true,
-                CommitTransactions = true
+                CompanyCode = Guid.Empty.ToString(),
+                UseSandbox = true,
+                CommitTransactions = true,
+                TaxOriginAddressType = TaxOriginAddressType.ShippingOrigin
             });
 
             //locales
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Credentials.Declined", "Credentials declined");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Credentials.Verified", "Credentials verified");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress", "Default tax address");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin", "Shipping origin address");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId", "Account ID");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint", "Cpecify Avalara account ID.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AvaTaxCode", "AvaTax tax code");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint", "Specify Avalara account ID.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions", "Commit transactions");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint", "Check for recording transactions in the history on your Avalara account.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CompanyCode", "Company code");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CompanyCode.Hint", "Enter your company code in Avalara account.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint", "Determine whether to commit tax transactions right after they are saved.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company", "Company");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning", "The default currency used by this company does not match the primary store currency");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Hint", "Choose a company that was previously added to the Avalara account.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.NotExist", "There are no active companies");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode", "Entity use code");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.Hint", "Choose a code that can be used to designate the reason for a particular sale being exempt. Each entity use code stands for a different exemption reason, the logic of which can be found in Avalara exemption reason documentation.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.None", "None");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey", "License key");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint", "Cpecify Avalara account license key.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.IsSandboxEnvironment", "Sandbox environment");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.IsSandboxEnvironment.Hint", "Check for using sandbox (testing environment).");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses", "Validate addresses");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses.Hint", "Check for validating addresses before tax requesting (only for US or Canadian address).");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes", "Import AvaTax tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes.Success", "Successfully imported {0} tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestConnection", "Test connection");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint", "Specify Avalara account license key.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription", "Description");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType", "Type");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType", "Tax origin address");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint", "Choose which address will be used as the origin for tax requests to Avalara services.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox", "Use sandbox");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint", "Determine whether to use sandbox (testing environment).");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export", "Export to Avalara (selected)");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported", "Selected products have already been exported");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error", "An error has occurred on export products");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success", "Successfully exported {0} products");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes", "Avalara tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete", "Delete Avalara system tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error", "An error has occurred on delete tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Success", "System tax codes successfully deleted");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export", "Export tax codes to Avalara");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.AlreadyExported", "All tax codes have already been exported");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Error", "An error has occurred on export tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Success", "Successfully exported {0} tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import", "Import Avalara system tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Error", "An error has occurred on import tax codes");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Success", "Successfully imported {0} tax codes");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax", "Test tax calculation");
-            
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Error", "An error has occurred on tax request");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Success", "The tax was successfully received");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials", "Test connection");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Declined", "Credentials declined");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Verified", "Credentials verified");
+
             base.Install();
         }
 
@@ -676,35 +726,81 @@ namespace Nop.Plugin.Tax.Avalara
         /// </summary>
         public override void Uninstall()
         {
-            //tax codes
+            //generic attributes
             foreach (var taxCategory in _taxCategoryService.GetAllTaxCategories())
             {
-                _genericAttributeService.SaveAttribute<string>(taxCategory, _avalaraImportManager.AvaTaxCodeAttribute, null);
+                _genericAttributeService.SaveAttribute<string>(taxCategory, AvalaraTaxDefaults.TaxCodeDescriptionAttribute, null);
+                _genericAttributeService.SaveAttribute<string>(taxCategory, AvalaraTaxDefaults.TaxCodeTypeAttribute, null);
+            }
+            foreach (var customer in _customerService.GetAllCustomers())
+            {
+                _genericAttributeService.SaveAttribute<string>(customer, AvalaraTaxDefaults.EntityUseCodeAttribute, null);
+            }
+            foreach (var customerRole in _customerService.GetAllCustomerRoles(true))
+            {
+                _genericAttributeService.SaveAttribute<string>(customerRole, AvalaraTaxDefaults.EntityUseCodeAttribute, null);
+            }
+            foreach (var product in _productService.SearchProducts(showHidden: true))
+            {
+                _genericAttributeService.SaveAttribute<string>(product, AvalaraTaxDefaults.EntityUseCodeAttribute, null);
+            }
+            foreach (var attribute in _checkoutAttributeService.GetAllCheckoutAttributes())
+            {
+                _genericAttributeService.SaveAttribute<string>(attribute, AvalaraTaxDefaults.EntityUseCodeAttribute, null);
             }
 
-            //settings
+            //settings            
+            _taxSettings.ActiveTaxProviderSystemName = _taxService.LoadAllTaxProviders()
+                .FirstOrDefault(taxProvider => !taxProvider.PluginDescriptor.SystemName.Equals(AvalaraTaxDefaults.SystemName))
+                ?.PluginDescriptor.SystemName;
+            _settingService.SaveSetting(_taxSettings);
+            _widgetSettings.ActiveWidgetSystemNames.Remove(AvalaraTaxDefaults.SystemName);
+            _settingService.SaveSetting(_widgetSettings);
             _settingService.DeleteSetting<AvalaraTaxSettings>();
 
             //locales
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Credentials.Declined");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Credentials.Verified");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AvaTaxCode");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CompanyCode");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CompanyCode.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.NotExist");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.None");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.IsSandboxEnvironment");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.IsSandboxEnvironment.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddresses.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.ImportTaxCodes.Success");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestConnection");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Success");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.AlreadyExported");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Error");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Success");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Error");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Success");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Error");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Success");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Declined");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Verified");
 
             base.Uninstall();
         }
