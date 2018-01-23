@@ -1,9 +1,9 @@
 nopCommerce Avalara plugin
 ===========
 
-nopCommerce site: [http://www.nopcommerce.com](http://www.nopcommerce.com)
+nopCommerce site: [https://www.nopcommerce.com](https://www.nopcommerce.com)
 
-Listing on nopCommerce "extensions and themes" catalog: [http://www.nopcommerce.com/p/2215/avalara-tax-provider.aspx](http://www.nopcommerce.com/p/2215/avalara-tax-provider.aspx)
+Listing on nopCommerce "extensions and themes" catalog: [https://www.nopcommerce.com/p/2215/avalara-tax-provider.aspx](https://www.nopcommerce.com/p/2215/avalara-tax-provider.aspx)
 
 
 
