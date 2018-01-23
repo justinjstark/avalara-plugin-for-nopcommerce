@@ -620,11 +620,16 @@ namespace Nop.Plugin.Tax.Avalara
             {
                 AvalaraTaxDefaults.CustomerDetailsWidgetZone,
                 AvalaraTaxDefaults.CustomerRoleDetailsWidgetZone,
-                AvalaraTaxDefaults.ProductDetailsWidgetZone,
-                AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone,
+
+                //for some reason managers of Avalara said to remove "entity use code" feature for products, thus we commented it
+                //AvalaraTaxDefaults.ProductDetailsWidgetZone,
+                //AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone,
+
                 AvalaraTaxDefaults.TaxSettingsWidgetZone,
                 AvalaraTaxDefaults.ProductListButtonsWidgetZone,
-                AvalaraTaxDefaults.TaxCategoriesButtonsWidgetZone
+                AvalaraTaxDefaults.TaxCategoriesButtonsWidgetZone,
+                AvalaraTaxDefaults.CheckoutConfirmPageWidgetZone,
+                AvalaraTaxDefaults.OnePageCheckoutConfirmPageWidgetZone
             };
         }
 
@@ -655,6 +660,11 @@ namespace Nop.Plugin.Tax.Avalara
                 case AvalaraTaxDefaults.TaxCategoriesButtonsWidgetZone:
                     viewComponentName = AvalaraTaxDefaults.TaxCodesViewComponentName;
                     return;
+
+                case AvalaraTaxDefaults.CheckoutConfirmPageWidgetZone:
+                case AvalaraTaxDefaults.OnePageCheckoutConfirmPageWidgetZone:
+                    viewComponentName = AvalaraTaxDefaults.AddressValidationViewComponentName;
+                    return;
             }
 
             viewComponentName = null;
@@ -677,6 +687,8 @@ namespace Nop.Plugin.Tax.Avalara
             //locales
             this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress", "Default tax address");
             this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin", "Shipping origin address");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm", "For the correct tax calculation we need the most accurate address, so we clarified the address you entered ({0}) through the validation system. Do you confirm the use of this updated address ({1})?");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error", "For the correct tax calculation we need the most accurate address. There are some errors from the validation system: {0}");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId", "Account ID");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint", "Specify Avalara account ID.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions", "Commit transactions");
@@ -696,6 +708,8 @@ namespace Nop.Plugin.Tax.Avalara
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint", "Choose which address will be used as the origin for tax requests to Avalara services.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox", "Use sandbox");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint", "Determine whether to use sandbox (testing environment).");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress", "Validate address");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress.Hint", "Determine whether to validate entered by customer addresses before the tax calculation.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export", "Export to Avalara (selected)");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported", "Selected products have already been exported");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error", "An error has occurred on export products");
@@ -761,6 +775,8 @@ namespace Nop.Plugin.Tax.Avalara
             //locales
             this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress");
             this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions");
@@ -780,6 +796,8 @@ namespace Nop.Plugin.Tax.Avalara
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error");

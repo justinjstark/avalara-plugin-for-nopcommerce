@@ -92,6 +92,11 @@ namespace Nop.Plugin.Tax.Avalara
         public const string TaxCodesViewComponentName = "AvalaraTaxCodes";
 
         /// <summary>
+        /// Name of the view component to validate entered address
+        /// </summary>
+        public const string AddressValidationViewComponentName = "AvalaraAddressValidation";
+
+        /// <summary>
         /// Customer details widget zone
         /// </summary>
         public const string CustomerDetailsWidgetZone = "admin_customer_details_info_top";
@@ -125,5 +130,15 @@ namespace Nop.Plugin.Tax.Avalara
         /// Tax categories buttons widget zone
         /// </summary>
         public const string TaxCategoriesButtonsWidgetZone = "admin_tax_category_list_buttons";
+
+        /// <summary>
+        /// Checkout confirmation page widget zone
+        /// </summary>
+        public const string CheckoutConfirmPageWidgetZone = "checkout_confirm_top";
+
+        /// <summary>
+        /// One page checkout confirmation page widget zone
+        /// </summary>
+        public const string OnePageCheckoutConfirmPageWidgetZone = "op_checkout_confirm_top";
     }
 }

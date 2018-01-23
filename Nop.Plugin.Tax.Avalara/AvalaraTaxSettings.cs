@@ -34,6 +34,11 @@ namespace Nop.Plugin.Tax.Avalara
         public bool CommitTransactions { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether to validate entered by customer addresses before the tax calculation
+        /// </summary>
+        public bool ValidateAddress { get; set; }
+
+        /// <summary>
         /// Gets or sets a type of the tax origin address
         /// </summary>
         public TaxOriginAddressType TaxOriginAddressType { get; set; }

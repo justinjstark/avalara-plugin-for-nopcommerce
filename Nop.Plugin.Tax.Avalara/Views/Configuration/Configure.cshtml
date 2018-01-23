@@ -66,6 +66,15 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <div class="col-md-3">
+                        <nop-label asp-for="ValidateAddress" />
+                    </div>
+                    <div class="col-md-9">
+                        <nop-editor asp-for="ValidateAddress" />
+                        <span asp-validation-for="ValidateAddress"></span>
+                    </div>
+                </div>
+                <div class="form-group">
                     <div class="col-md-9 col-md-offset-3">
                         <div class="input-group input-group-short">
                             <div class="input-group-text">

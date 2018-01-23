@@ -43,6 +43,9 @@ namespace Nop.Plugin.Tax.Avalara.Models.Configuration
         [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.CommitTransactions")]
         public bool CommitTransactions { get; set; }
 
+        [NopResourceDisplayName("Plugins.Tax.Avalara.Fields.ValidateAddress")]
+        public bool ValidateAddress { get; set; }
+
         public AddressModel TestAddress { get; set; }
 
         public string TestTaxResult { get; set; }

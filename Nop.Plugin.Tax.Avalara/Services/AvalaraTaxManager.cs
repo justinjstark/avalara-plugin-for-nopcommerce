@@ -372,6 +372,21 @@ namespace Nop.Plugin.Tax.Avalara.Services
             });
         }
 
+        /// <summary>
+        /// Resolve the passed address against Avalara's address-validation system
+        /// </summary>
+        /// <param name="addressToValidate">Address to validate</param>
+        /// <returns>Validated address</returns>
+        public AddressResolutionModel ValidateAddress(AddressValidationInfo addressToValidate)
+        {
+            return HandleRequest(() =>
+            {
+                //return result
+                return CreateServiceClient().ResolveAddressPost(addressToValidate)
+                    ?? throw new NopException("No response from the service");
+            });
+        }
+
         #endregion
     }
 }

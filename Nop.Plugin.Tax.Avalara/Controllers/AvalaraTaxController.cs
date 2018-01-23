@@ -121,7 +121,8 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 LicenseKey = _avalaraTaxSettings.LicenseKey,
                 CompanyCode = _avalaraTaxSettings.CompanyCode,
                 UseSandbox = _avalaraTaxSettings.UseSandbox,
-                CommitTransactions = _avalaraTaxSettings.CommitTransactions
+                CommitTransactions = _avalaraTaxSettings.CommitTransactions,
+                ValidateAddress = _avalaraTaxSettings.ValidateAddress
             };
 
             //prepare address model
@@ -179,6 +180,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             _avalaraTaxSettings.CompanyCode = model.CompanyCode;
             _avalaraTaxSettings.UseSandbox = model.UseSandbox;
             _avalaraTaxSettings.CommitTransactions = model.CommitTransactions;
+            _avalaraTaxSettings.ValidateAddress = model.ValidateAddress;
             _settingService.SaveSetting(_avalaraTaxSettings);
 
             SuccessNotification(_localizationService.GetResource("Admin.Plugins.Saved"));
