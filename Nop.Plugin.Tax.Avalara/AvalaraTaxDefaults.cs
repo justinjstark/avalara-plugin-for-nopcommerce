@@ -140,5 +140,10 @@ namespace Nop.Plugin.Tax.Avalara
         /// One page checkout confirmation page widget zone
         /// </summary>
         public const string OnePageCheckoutConfirmPageWidgetZone = "op_checkout_confirm_top";
+
+        /// <summary>
+        /// Custom data objects context name
+        /// </summary>
+        public const string ObjectContextName = "nop_object_context_tax_avalara";
     }
 }

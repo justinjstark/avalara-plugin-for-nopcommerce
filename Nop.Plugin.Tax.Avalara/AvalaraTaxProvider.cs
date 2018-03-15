@@ -11,6 +11,7 @@ using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Shipping;
 using Nop.Core.Domain.Tax;
 using Nop.Core.Plugins;
+using Nop.Plugin.Tax.Avalara.Data;
 using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Catalog;
@@ -50,6 +51,7 @@ namespace Nop.Plugin.Tax.Avalara
         private readonly IWebHelper _webHelper;
         private readonly ShippingSettings _shippingSettings;
         private readonly TaxSettings _taxSettings;
+        private readonly TaxTransactionLogObjectContext _objectContext;
         private readonly WidgetSettings _widgetSettings;
 
         #endregion
@@ -74,6 +76,7 @@ namespace Nop.Plugin.Tax.Avalara
             IWebHelper webHelper,
             ShippingSettings shippingSettings,
             TaxSettings taxSettings,
+            TaxTransactionLogObjectContext objectContext,
             WidgetSettings widgetSettings)
         {
             this._avalaraTaxManager = avalaraTaxManager;
@@ -94,6 +97,7 @@ namespace Nop.Plugin.Tax.Avalara
             this._webHelper = webHelper;
             this._shippingSettings = shippingSettings;
             this._taxSettings = taxSettings;
+            this._objectContext = objectContext;
             this._widgetSettings = widgetSettings;
         }
 
@@ -513,7 +517,7 @@ namespace Nop.Plugin.Tax.Avalara
         public TransactionModel CreateEstimatedTaxTransaction(Address destinationAddress, string customerCode)
         {
             var transactionModel = PrepareEstimatedTaxModel(destinationAddress, customerCode);
-            return _avalaraTaxManager.CreateTaxTransaction(transactionModel);
+            return _avalaraTaxManager.CreateTaxTransaction(transactionModel, false);
         }
 
         /// <summary>
@@ -536,7 +540,7 @@ namespace Nop.Plugin.Tax.Avalara
         public TransactionModel CreateOrderTaxTransaction(Order order, bool save = true)
         {
             var transactionModel = PrepareOrderTaxModel(order, save);
-            return _avalaraTaxManager.CreateTaxTransaction(transactionModel);
+            return _avalaraTaxManager.CreateTaxTransaction(transactionModel, save);
         }
 
         /// <summary>
@@ -675,6 +679,9 @@ namespace Nop.Plugin.Tax.Avalara
         /// </summary>
         public override void Install()
         {
+            //database objects
+            _objectContext.Install();
+
             //settings
             _settingService.SaveSetting(new AvalaraTaxSettings
             {
@@ -685,10 +692,18 @@ namespace Nop.Plugin.Tax.Avalara
             });
 
             //locales
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Create", "Create request");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.CreateResponse", "Create response");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Error", "Error");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Refund", "Refund request");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.RefundResponse", "Refund response");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Void", "Void request");
+            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.VoidResponse", "Void response");
             this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress", "Default tax address");
             this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin", "Shipping origin address");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm", "For the correct tax calculation we need the most accurate address, so we clarified the address you entered ({0}) through the validation system. Do you confirm the use of this updated address ({1})?");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error", "For the correct tax calculation we need the most accurate address. There are some errors from the validation system: {0}");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Configuration", "Configuration");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId", "Account ID");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint", "Specify Avalara account ID.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions", "Commit transactions");
@@ -714,6 +729,25 @@ namespace Nop.Plugin.Tax.Avalara
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported", "Selected products have already been exported");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error", "An error has occurred on export products");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success", "Successfully exported {0} products");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log", "Log");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.BackToList", "back to log");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.ClearLog", "Clear log");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate", "Created on");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate.Hint", "Date and time the log entry was created.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer", "Customer");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer.Hint", "Name of the customer.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Deleted", "The log entry has been deleted successfully.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Hint", "View log entry details");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType", "Type");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType.Hint", "The type of log entry.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Message", "Message");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Message.Hint", "The details for the log entry.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom", "Created from");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom.Hint", "The creation from date for the search.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo", "Created to");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo.Hint", "The creation to date for the search.");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType", "Type");
+            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType.Hint", "Select a log type.");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes", "Avalara tax codes");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete", "Delete Avalara system tax codes");
             this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error", "An error has occurred on delete tax codes");
@@ -740,6 +774,9 @@ namespace Nop.Plugin.Tax.Avalara
         /// </summary>
         public override void Uninstall()
         {
+            //database objects
+            _objectContext.Uninstall();
+
             //generic attributes
             foreach (var taxCategory in _taxCategoryService.GetAllTaxCategories())
             {
@@ -773,10 +810,18 @@ namespace Nop.Plugin.Tax.Avalara
             _settingService.DeleteSetting<AvalaraTaxSettings>();
 
             //locales
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Create");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.CreateResponse");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Error");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Refund");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.RefundResponse");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Void");
+            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.VoidResponse");
             this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress");
             this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Configuration");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions");
@@ -802,6 +847,25 @@ namespace Nop.Plugin.Tax.Avalara
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.BackToList");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.ClearLog");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Deleted");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Message");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Message.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo.Hint");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType");
+            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType.Hint");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete");
             this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error");

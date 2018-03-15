@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalara.AvaTax.RestClient;
 using Nop.Core;
+using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Services.Logging;
 
 namespace Nop.Plugin.Tax.Avalara.Services
@@ -16,6 +17,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
         private readonly AvalaraTaxSettings _avalaraTaxSettings;
         private readonly ILogger _logger;
+        private readonly ITaxTransactionLogService _taxTransactionLogService;
         private readonly IWorkContext _workContext;
 
         #endregion
@@ -24,10 +26,12 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
         public AvalaraTaxManager(AvalaraTaxSettings avalaraTaxSettings,
             ILogger logger,
+            ITaxTransactionLogService taxTransactionLogService,
             IWorkContext workContext)
         {
             this._avalaraTaxSettings = avalaraTaxSettings;
             this._logger = logger;
+            this._taxTransactionLogService = taxTransactionLogService;
             this._workContext = workContext;
         }
 
@@ -83,14 +87,20 @@ namespace Nop.Plugin.Tax.Avalara.Services
             {
                 //compose an error message
                 var errorMessage = exception.Message;
-                if (exception is AvaTaxError avaTaxError && avaTaxError.error?.error != null)
+                if (exception is AvaTaxError avaTaxError && avaTaxError.error != null)
                 {
+                    //log tax transaction error
+                    LogTaxTransaction(avaTaxError.error, LogType.Error);
+
                     var errorInfo = avaTaxError.error.error;
-                    errorMessage = $"{errorInfo.code} - {errorInfo.message}{Environment.NewLine}";
-                    if (errorInfo.details?.Any() ?? false)
+                    if (errorInfo != null)
                     {
-                        var errorDetails = errorInfo.details.Aggregate(string.Empty, (error, detail) => $"{error}{detail.description}{Environment.NewLine}");
-                        errorMessage = $"{errorMessage} Details: {errorDetails}";
+                        errorMessage = $"{errorInfo.code} - {errorInfo.message}{Environment.NewLine}";
+                        if (errorInfo.details?.Any() ?? false)
+                        {
+                            var errorDetails = errorInfo.details.Aggregate(string.Empty, (error, detail) => $"{error}{detail.description}{Environment.NewLine}");
+                            errorMessage = $"{errorMessage} Details: {errorDetails}";
+                        }
                     }
                 }
 
@@ -99,6 +109,23 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
                 return default(T);
             }
+        }
+
+        /// <summary>
+        /// Log tax transaction details
+        /// </summary>
+        /// <typeparam name="T">Type of value</typeparam>
+        /// <param name="value">Value</param>
+        /// <param name="logType">Log type</param>
+        private void LogTaxTransaction<T>(T value, LogType logType)
+        {
+            _taxTransactionLogService.InsertTaxTransactionLog(new TaxTransactionLog
+            {
+                LogType = logType,
+                Message = value.ToString(),
+                CustomerId = _workContext.CurrentCustomer.Id,
+                CreatedDateUtc = DateTime.UtcNow
+            });
         }
 
         #endregion
@@ -313,14 +340,23 @@ namespace Nop.Plugin.Tax.Avalara.Services
         /// Create tax transaction
         /// </summary>
         /// <param name="createTransactionModel">Request parameters to create a transaction</param>
+        /// <param name="logTransactionDetails">Whether to log tax transaction request and response</param>
         /// <returns>Transaction</returns>
-        public TransactionModel CreateTaxTransaction(CreateTransactionModel createTransactionModel)
+        public TransactionModel CreateTaxTransaction(CreateTransactionModel createTransactionModel, bool logTransactionDetails)
         {
             return HandleRequest(() =>
             {
+                //log tax transaction request
+                if (logTransactionDetails)
+                    LogTaxTransaction(createTransactionModel, LogType.Create);
+
                 //create transaction
                 var transaction = CreateServiceClient().CreateTransaction(string.Empty, createTransactionModel)
                     ?? throw new NopException("No response from the service");
+
+                //log tax transaction response
+                if (logTransactionDetails)
+                    LogTaxTransaction(transaction, LogType.CreateResponse);
 
                 //whether there are any errors
                 if (transaction.messages?.Any() ?? false)
@@ -347,9 +383,17 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 if (string.IsNullOrEmpty(_avalaraTaxSettings.CompanyCode) || _avalaraTaxSettings.CompanyCode.Equals(Guid.Empty.ToString()))
                     throw new NopException("Company not selected");
 
+                //log tax transaction request
+                LogTaxTransaction(voidTransactionModel, LogType.Void);
+
                 //return result
-                return CreateServiceClient().VoidTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, voidTransactionModel)
+                var transaction = CreateServiceClient().VoidTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, voidTransactionModel)
                     ?? throw new NopException("No response from the service");
+
+                //log tax transaction response
+                LogTaxTransaction(transaction, LogType.VoidResponse);
+
+                return transaction;
             });
         }
 
@@ -366,9 +410,17 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 if (string.IsNullOrEmpty(_avalaraTaxSettings.CompanyCode) || _avalaraTaxSettings.CompanyCode.Equals(Guid.Empty.ToString()))
                     throw new NopException("Company not selected");
 
+                //log tax transaction request
+                LogTaxTransaction(refundTransactionModel, LogType.Refund);
+
                 //return result
-                return CreateServiceClient().RefundTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, null, refundTransactionModel)
+                var transaction = CreateServiceClient().RefundTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, null, refundTransactionModel)
                     ?? throw new NopException("No response from the service");
+
+                //log tax transaction response
+                LogTaxTransaction(transaction, LogType.RefundResponse);
+
+                return transaction;
             });
         }
 

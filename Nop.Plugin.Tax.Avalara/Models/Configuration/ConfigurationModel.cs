@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Nop.Plugin.Tax.Avalara.Models.Log;
 using Nop.Web.Areas.Admin.Models.Common;
 using Nop.Web.Framework.Mvc.ModelBinding;
 
@@ -17,6 +18,7 @@ namespace Nop.Plugin.Tax.Avalara.Models.Configuration
         {
             TestAddress = new AddressModel();
             Companies = new List<SelectListItem>();
+            TaxTransactionLogListModel = new TaxTransactionLogListModel();
         }
 
         #endregion
@@ -49,6 +51,8 @@ namespace Nop.Plugin.Tax.Avalara.Models.Configuration
         public AddressModel TestAddress { get; set; }
 
         public string TestTaxResult { get; set; }
+
+        public TaxTransactionLogListModel TaxTransactionLogListModel { get; set; }
 
         #endregion
     }
