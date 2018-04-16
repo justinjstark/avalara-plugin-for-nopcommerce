@@ -23,7 +23,15 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
         /// </summary>
         public static string AVATAX_CLIENT
         {
-            get { return "nopCommerce-AvalaraTaxRateProvider-1.31"; }
+            get { return "nopCommerce-AvalaraTaxRateProvider-1.32"; }
+        }
+
+        /// <summary>
+        /// Get an identifier of certified integration
+        /// </summary>
+        public static string AVATAX_UID
+        {
+            get { return "a0o33000004BoPM"; }
         }
 
         #endregion
@@ -121,6 +129,9 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
             request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
 
+            //add UID header
+            request.Headers.Add("X-Avalara-UID", AVATAX_UID);
+
             try
             {
                 //post request
@@ -186,6 +197,9 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
             request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
 
+            //add UID header
+            request.Headers.Add("X-Avalara-UID", AVATAX_UID);
+
             try
             {
                 //get response
@@ -238,6 +252,9 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             var login = string.Format("{0}:{1}", avalaraTaxSettings.AccountId, avalaraTaxSettings.LicenseKey);
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
             request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
+
+            //add UID header
+            request.Headers.Add("X-Avalara-UID", AVATAX_UID);
 
             try
             {
@@ -312,6 +329,9 @@ namespace Nop.Plugin.Tax.Avalara.Helpers
             var login = string.Format("{0}:{1}", avalaraTaxSettings.AccountId, avalaraTaxSettings.LicenseKey);
             var authorization = Convert.ToBase64String(Encoding.ASCII.GetBytes(login));
             request.Headers.Add(HttpRequestHeader.Authorization, string.Format("Basic {0}", authorization));
+
+            //add UID header
+            request.Headers.Add("X-Avalara-UID", AVATAX_UID);
 
             try
             {
