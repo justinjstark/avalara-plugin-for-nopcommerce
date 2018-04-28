@@ -16,13 +16,15 @@ namespace Nop.Plugin.Tax.Avalara
         /// <summary>
         /// Avalara tax provider connector name
         /// </summary>
-        public static string ApplicationName => "nopCommerce-AvalaraTaxRateProvider";
+        public static string ApplicationName => "nopCommerce-AvalaraTaxRateProvider|a0o33000004BoPM";
 
         /// <summary>
         /// Avalara tax provider version
         /// </summary>
-        public static string ApplicationVersion => EngineContext.Current.Resolve<ITaxService>()?
-            .LoadTaxProviderBySystemName(SystemName)?.PluginDescriptor.Version ?? "2.00";
+        public static string ApplicationVersion =>
+            //for some reason Avalara managers want to see just "v4" string as a version, so let's do it
+            //EngineContext.Current.Resolve<ITaxService>()?.LoadTaxProviderBySystemName(SystemName)?.PluginDescriptor.Version ?? "2.00";
+            "v4";
 
         /// <summary>
         /// Name of the generic attribute that is used to store Avalara system tax code description
