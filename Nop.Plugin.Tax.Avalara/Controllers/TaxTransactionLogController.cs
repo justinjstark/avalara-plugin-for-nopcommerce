@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
-using Nop.Core;
 using Nop.Core.Html;
-using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Models.Log;
 using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Customers;
@@ -11,7 +9,6 @@ using Nop.Services.Helpers;
 using Nop.Services.Localization;
 using Nop.Services.Security;
 using Nop.Web.Areas.Admin.Controllers;
-using Nop.Web.Framework.Kendoui;
 
 namespace Nop.Plugin.Tax.Avalara.Controllers
 {
@@ -24,7 +21,6 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         private readonly ILocalizationService _localizationService;
         private readonly IPermissionService _permissionService;
         private readonly ITaxTransactionLogService _taxTransactionLogService;
-        private readonly IWorkContext _workContext;
 
         #endregion
 
@@ -34,15 +30,13 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             IDateTimeHelper dateTimeHelper,
             ILocalizationService localizationService,
             IPermissionService permissionService,
-            ITaxTransactionLogService taxTransactionLogService,
-            IWorkContext workContext)
+            ITaxTransactionLogService taxTransactionLogService)
         {
             this._customerService = customerService;
             this._dateTimeHelper = dateTimeHelper;
             this._localizationService = localizationService;
             this._permissionService = permissionService;
             this._taxTransactionLogService = taxTransactionLogService;
-            this._workContext = workContext;
         }
 
         #endregion
@@ -50,40 +44,39 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         #region Methods
 
         [HttpPost]
-        public virtual IActionResult LogList(TaxTransactionLogListModel model, DataSourceRequest command)
+        public virtual IActionResult LogList(TaxTransactionLogSearchModel searchModel)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedKendoGridJson();
 
             //prepare filter parameters
-            var createdFromValue = model.CreatedFrom.HasValue
-                ? (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.CreatedFrom.Value, _dateTimeHelper.CurrentTimeZone) : null;
-            var createdToValue = model.CreatedTo.HasValue
-                ? (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.CreatedTo.Value, _dateTimeHelper.CurrentTimeZone).AddDays(1) : null;
-            var logType = model.LogTypeId > 0 ? (LogType?)(model.LogTypeId) : null;
+            var createdFromValue = searchModel.CreatedFrom.HasValue
+                ? (DateTime?)_dateTimeHelper.ConvertToUtcTime(searchModel.CreatedFrom.Value, _dateTimeHelper.CurrentTimeZone) : null;
+            var createdToValue = searchModel.CreatedTo.HasValue
+                ? (DateTime?)_dateTimeHelper.ConvertToUtcTime(searchModel.CreatedTo.Value, _dateTimeHelper.CurrentTimeZone).AddDays(1) : null;
 
             //get tax transaction log
-            var taxtransactionLog = _taxTransactionLogService.GetTaxTransactionLog(logType: logType, 
-                createdFromUtc: createdFromValue, createdToUtc: createdToValue,
-                pageIndex: command.Page - 1, pageSize: command.PageSize);
+            var taxtransactionLog = _taxTransactionLogService.GetTaxTransactionLog(createdFromUtc: createdFromValue,
+                createdToUtc: createdToValue, pageIndex: searchModel.Page - 1, pageSize: searchModel.PageSize);
 
-            //prepare model
-            var gridModel = new DataSourceResult
+            //prepare grid model
+            var model = new TaxTransactionLogListModel
             {
+                //fill in model values from the entity
                 Data = taxtransactionLog.Select(logItem => new TaxTransactionLogModel
                 {
                     Id = logItem.Id,
-                    LogType = logItem.LogType.GetLocalizedEnum(_localizationService, _workContext),
-                    Message = CommonHelper.EnsureMaximumLength(logItem.Message, 100, "..."),
+                    StatusCode = logItem.StatusCode,
+                    Url = logItem.Url,
                     CustomerId = logItem.CustomerId,
                     CreatedDate = _dateTimeHelper.ConvertToUserTime(logItem.CreatedDateUtc, DateTimeKind.Utc)
                 }),
                 Total = taxtransactionLog.TotalCount
             };
 
-            return Json(gridModel);
+            return Json(model);
         }
-        
+
         public virtual IActionResult ClearAll()
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
@@ -107,8 +100,10 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             var model = new TaxTransactionLogModel
             {
                 Id = logItem.Id,
-                LogType = logItem.LogType.GetLocalizedEnum(_localizationService, _workContext),
-                Message = HtmlHelper.FormatText(logItem.Message, false, true, false, false, false, false),
+                StatusCode = logItem.StatusCode,
+                Url = logItem.Url,
+                RequestMessage = HtmlHelper.FormatText(logItem.RequestMessage, false, true, false, false, false, false),
+                ResponseMessage = HtmlHelper.FormatText(logItem.ResponseMessage, false, true, false, false, false, false),
                 CustomerId = logItem.CustomerId,
                 CustomerEmail = _customerService.GetCustomerById(logItem.CustomerId)?.Email,
                 CreatedDate = _dateTimeHelper.ConvertToUserTime(logItem.CreatedDateUtc, DateTimeKind.Utc)

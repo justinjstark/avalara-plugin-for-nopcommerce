@@ -10,8 +10,8 @@ using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Factories;
 using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Orders;
-using Nop.Web.Factories;
-using Nop.Web.Framework.Infrastructure;
+using Nop.Web.Areas.Admin.Factories;
+using Nop.Web.Framework.Infrastructure.Extensions;
 
 namespace Nop.Plugin.Tax.Avalara.Infrastructure
 {
@@ -30,14 +30,16 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         {
             //register overridden services and factories
             builder.RegisterType<OverriddenOrderProcessingService>().As<IOrderProcessingService>().InstancePerLifetimeScope();
-            builder.RegisterType<OverriddenShoppingCartModelFactory>().As<IShoppingCartModelFactory>().InstancePerLifetimeScope();
+            builder.RegisterType<OverriddenShoppingCartModelFactory>().As<Web.Factories.IShoppingCartModelFactory>().InstancePerLifetimeScope();
+            builder.RegisterType<OverriddenTaxModelFactory>().As<ITaxModelFactory>().InstancePerLifetimeScope();
+            builder.RegisterType<OverriddenWidgetModelFactory>().As<IWidgetModelFactory>().InstancePerLifetimeScope();
 
             //register custom services
             builder.RegisterType<AvalaraTaxManager>().AsSelf().InstancePerLifetimeScope();
             builder.RegisterType<TaxTransactionLogService>().As<ITaxTransactionLogService>().InstancePerLifetimeScope();
 
             //register custom data context
-            this.RegisterPluginDataContext<TaxTransactionLogObjectContext>(builder, AvalaraTaxDefaults.ObjectContextName);
+            builder.RegisterPluginDataContext<TaxTransactionLogObjectContext>(AvalaraTaxDefaults.ObjectContextName);
             builder.RegisterType<EfRepository<TaxTransactionLog>>().As<IRepository<TaxTransactionLog>>()
                 .WithParameter(ResolvedParameter.ForNamed<IDbContext>(AvalaraTaxDefaults.ObjectContextName))
                 .InstancePerLifetimeScope();
@@ -46,9 +48,6 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         /// <summary>
         /// Order of this dependency registrar implementation
         /// </summary>
-        public int Order
-        {
-            get { return 4; }
-        }
+        public int Order => 4;
     }
 }

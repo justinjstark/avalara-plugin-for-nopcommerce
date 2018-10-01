@@ -16,6 +16,7 @@ using Nop.Services.Logging;
 using Nop.Services.Security;
 using Nop.Services.Tax;
 using Nop.Web.Framework.Components;
+using Nop.Web.Framework.Infrastructure;
 
 namespace Nop.Plugin.Tax.Avalara.Components
 {
@@ -108,11 +109,8 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 return Content(string.Empty);
 
             //ensure that it's a proper widget zone
-            if (!widgetZone.Equals(AvalaraTaxDefaults.CheckoutConfirmPageWidgetZone) &&
-                !widgetZone.Equals(AvalaraTaxDefaults.OnePageCheckoutConfirmPageWidgetZone))
-            {
+            if (!widgetZone.Equals(PublicWidgetZones.CheckoutConfirmTop) && !widgetZone.Equals(PublicWidgetZones.OpCheckoutConfirmTop))
                 return Content(string.Empty);
-            }
 
             //ensure thet address validation is enabled
             if (!_avalaraTaxSettings.ValidateAddress)
@@ -123,7 +121,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
             if (_taxSettings.TaxBasedOn == TaxBasedOn.BillingAddress)
                 address = _workContext.CurrentCustomer.BillingAddress;
             if (_taxSettings.TaxBasedOn == TaxBasedOn.ShippingAddress)
-                address = _workContext.CurrentCustomer.ShippingAddress;            
+                address = _workContext.CurrentCustomer.ShippingAddress;
             if (address == null)
                 return Content(string.Empty);
 
@@ -175,11 +173,11 @@ namespace Nop.Plugin.Tax.Avalara.Components
             validatedAddress.StateProvince = _stateProvinceService.GetStateProvinceByAbbreviation(validatedAddressInfo.region);
 
             //try to find an existing address with the same values
-            var existingAddress = _workContext.CurrentCustomer.Addresses.ToList().FindAddress(
+            var existingAddress = _addressService.FindAddress(_workContext.CurrentCustomer.Addresses.ToList(),
                 validatedAddress.FirstName, validatedAddress.LastName, validatedAddress.PhoneNumber,
                 validatedAddress.Email, validatedAddress.FaxNumber, validatedAddress.Company,
                 validatedAddress.Address1, validatedAddress.Address2, validatedAddress.City,
-                validatedAddress.StateProvinceId, validatedAddress.ZipPostalCode,
+                validatedAddress.County, validatedAddress.StateProvinceId, validatedAddress.ZipPostalCode,
                 validatedAddress.CountryId, validatedAddress.CustomAttributes);
 
             //if the found address is the same as address to validate, nothing to display
@@ -197,7 +195,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
             else
                 model.AddressId = existingAddress.Id;
 
-            model.Message = string.Format(_localizationService.GetResource("Plugins.Tax.Avalara.AddressValidation.Confirm"), 
+            model.Message = string.Format(_localizationService.GetResource("Plugins.Tax.Avalara.AddressValidation.Confirm"),
                 GetAddressLine(address), GetAddressLine(existingAddress ?? validatedAddress));
 
             return View("~/Plugins/Tax.Avalara/Views/Checkout/AddressValidation.cshtml", model);

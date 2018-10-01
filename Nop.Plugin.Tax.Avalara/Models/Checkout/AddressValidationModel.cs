@@ -1,4 +1,4 @@
-﻿using Nop.Web.Framework.Mvc.Models;
+﻿using Nop.Web.Framework.Models;
 
 namespace Nop.Plugin.Tax.Avalara.Models.Checkout
 {

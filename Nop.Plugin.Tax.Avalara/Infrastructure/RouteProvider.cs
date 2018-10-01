@@ -17,23 +17,16 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         public void RegisterRoutes(IRouteBuilder routeBuilder)
         {
             //override some of default routes in Admin area
-            routeBuilder.MapRoute("Plugin.Tax.Avalara.Tax.Categories", "Admin/Tax/Categories",
-                new { controller = "OverriddenTax", action = "Categories", area = AreaNames.Admin });
+            routeBuilder.MapRoute("Plugin.Tax.Avalara.Tax.List", "Admin/Tax/List",
+                new { controller = "OverriddenTax", action = "List", area = AreaNames.Admin });
 
             routeBuilder.MapRoute("Plugin.Tax.Avalara.Tax.MarkAsPrimaryProvider", "Admin/Tax/MarkAsPrimaryProvider",
                 new { controller = "OverriddenTax", action = "MarkAsPrimaryProvider", area = AreaNames.Admin });
-
-            routeBuilder.MapRoute("Plugin.Tax.Avalara.Widget.List", "Admin/Widget/List",
-                new { controller = "OverriddenWidget", action = "List", area = AreaNames.Admin });
         }
 
         /// <summary>
         /// Gets a priority of route provider
         /// </summary>
-        public int Priority
-        {
-            //set a value that is greater than the default one in Nop.Web to override routes
-            get { return 1; }
-        }
+        public int Priority => 1; //set a value that is greater than the default one in Nop.Web to override routes
     }
 }

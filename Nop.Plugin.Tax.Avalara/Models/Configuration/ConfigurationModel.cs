@@ -18,7 +18,7 @@ namespace Nop.Plugin.Tax.Avalara.Models.Configuration
         {
             TestAddress = new AddressModel();
             Companies = new List<SelectListItem>();
-            TaxTransactionLogListModel = new TaxTransactionLogListModel();
+            TaxTransactionLogSearchModel = new TaxTransactionLogSearchModel();
         }
 
         #endregion
@@ -52,7 +52,7 @@ namespace Nop.Plugin.Tax.Avalara.Models.Configuration
 
         public string TestTaxResult { get; set; }
 
-        public TaxTransactionLogListModel TaxTransactionLogListModel { get; set; }
+        public TaxTransactionLogSearchModel TaxTransactionLogSearchModel { get; set; }
 
         #endregion
     }

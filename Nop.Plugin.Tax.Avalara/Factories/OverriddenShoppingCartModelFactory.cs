@@ -9,11 +9,14 @@ using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Media;
 using Nop.Core.Domain.Orders;
+using Nop.Core.Domain.Security;
 using Nop.Core.Domain.Shipping;
 using Nop.Core.Domain.Tax;
+using Nop.Core.Domain.Vendors;
 using Nop.Core.Http.Extensions;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
+using Nop.Services.Customers;
 using Nop.Services.Directory;
 using Nop.Services.Discounts;
 using Nop.Services.Localization;
@@ -21,10 +24,11 @@ using Nop.Services.Media;
 using Nop.Services.Orders;
 using Nop.Services.Payments;
 using Nop.Services.Security;
+using Nop.Services.Seo;
 using Nop.Services.Shipping;
 using Nop.Services.Tax;
+using Nop.Services.Vendors;
 using Nop.Web.Factories;
-using Nop.Web.Framework.Security.Captcha;
 using Nop.Web.Models.ShoppingCart;
 
 namespace Nop.Plugin.Tax.Avalara.Factories
@@ -38,13 +42,14 @@ namespace Nop.Plugin.Tax.Avalara.Factories
 
         private readonly ICountryService _countryService;
         private readonly ICurrencyService _currencyService;
+        private readonly IGenericAttributeService _genericAttributeService;
+        private readonly IGiftCardService _giftCardService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IOrderTotalCalculationService _orderTotalCalculationService;
         private readonly IPaymentService _paymentService;
         private readonly IPriceCalculationService _priceCalculationService;
         private readonly IPriceFormatter _priceFormatter;
-        private readonly IProductAttributeParser _productAttributeParser;
-        private readonly IProductService _productService;
+        private readonly IShoppingCartService _shoppingCartService;
         private readonly IStateProvinceService _stateProvinceService;
         private readonly IStoreContext _storeContext;
         private readonly ITaxService _taxService;
@@ -57,94 +62,104 @@ namespace Nop.Plugin.Tax.Avalara.Factories
 
         #region Ctor
 
-        public OverriddenShoppingCartModelFactory(IAddressModelFactory addressModelFactory,
-            IStoreContext storeContext,
-            IWorkContext workContext,
-            IShoppingCartService shoppingCartService,
-            IPictureService pictureService,
-            ILocalizationService localizationService,
-            IProductService productService,
-            IProductAttributeFormatter productAttributeFormatter,
-            IProductAttributeParser productAttributeParser,
-            ITaxService taxService, ICurrencyService currencyService,
-            IPriceCalculationService priceCalculationService,
-            IPriceFormatter priceFormatter,
-            ICheckoutAttributeParser checkoutAttributeParser,
-            ICheckoutAttributeFormatter checkoutAttributeFormatter,
-            IOrderProcessingService orderProcessingService,
-            IDiscountService discountService,
-            ICountryService countryService,
-            IStateProvinceService stateProvinceService,
-            IShippingService shippingService,
-            IOrderTotalCalculationService orderTotalCalculationService,
-            ICheckoutAttributeService checkoutAttributeService,
-            IPaymentService paymentService,
-            IPermissionService permissionService,
-            IDownloadService downloadService,
-            IStaticCacheManager cacheManager,
-            IWebHelper webHelper,
-            IGenericAttributeService genericAttributeService,
-            IHttpContextAccessor httpContextAccessor,
-            MediaSettings mediaSettings,
-            ShoppingCartSettings shoppingCartSettings,
+        public OverriddenShoppingCartModelFactory(AddressSettings addressSettings,
+            CaptchaSettings captchaSettings,
             CatalogSettings catalogSettings,
             CommonSettings commonSettings,
+            CustomerSettings customerSettings,
+            IAddressModelFactory addressModelFactory,
+            ICheckoutAttributeFormatter checkoutAttributeFormatter,
+            ICheckoutAttributeParser checkoutAttributeParser,
+            ICheckoutAttributeService checkoutAttributeService,
+            ICountryService countryService,
+            ICurrencyService currencyService,
+            ICustomerService customerService,
+            IDiscountService discountService,
+            IDownloadService downloadService,
+            IGenericAttributeService genericAttributeService,
+            IGiftCardService giftCardService,
+            IHttpContextAccessor httpContextAccessor,
+            ILocalizationService localizationService,
+            IOrderProcessingService orderProcessingService,
+            IOrderTotalCalculationService orderTotalCalculationService,
+            IPaymentService paymentService,
+            IPermissionService permissionService,
+            IPictureService pictureService,
+            IPriceCalculationService priceCalculationService,
+            IPriceFormatter priceFormatter,
+            IProductAttributeFormatter productAttributeFormatter,
+            IProductService productService,
+            IShippingService shippingService,
+            IShoppingCartService shoppingCartService,
+            IStateProvinceService stateProvinceService,
+            IStaticCacheManager cacheManager,
+            IStoreContext storeContext,
+            ITaxService taxService,
+            IUrlRecordService urlRecordService,
+            IVendorService vendorService,
+            IWebHelper webHelper,
+            IWorkContext workContext,
+            MediaSettings mediaSettings,
             OrderSettings orderSettings,
-            ShippingSettings shippingSettings,
-            TaxSettings taxSettings,
-            CaptchaSettings captchaSettings,
-            AddressSettings addressSettings,
             RewardPointsSettings rewardPointsSettings,
-            CustomerSettings customerSettings) : base(addressModelFactory,
-                storeContext,
-                workContext,
-                shoppingCartService,
-                pictureService,
-                localizationService,
-                productService,
-                productAttributeFormatter,
-                productAttributeParser,
-                taxService,
-                currencyService,
-                priceCalculationService,
-                priceFormatter,
-                checkoutAttributeParser,
-                checkoutAttributeFormatter,
-                orderProcessingService,
-                discountService,
-                countryService,
-                stateProvinceService,
-                shippingService,
-                orderTotalCalculationService,
-                checkoutAttributeService,
-                paymentService,
-                permissionService,
-                downloadService,
-                cacheManager,
-                webHelper,
-                genericAttributeService,
-                httpContextAccessor,
-                mediaSettings,
-                shoppingCartSettings,
+            ShippingSettings shippingSettings,
+            ShoppingCartSettings shoppingCartSettings,
+            TaxSettings taxSettings,
+            VendorSettings vendorSettings) : base(addressSettings,
+                captchaSettings,
                 catalogSettings,
                 commonSettings,
+                customerSettings,
+                addressModelFactory,
+                checkoutAttributeFormatter,
+                checkoutAttributeParser,
+                checkoutAttributeService,
+                countryService,
+                currencyService,
+                customerService,
+                discountService,
+                downloadService,
+                genericAttributeService,
+                giftCardService,
+                httpContextAccessor,
+                localizationService,
+                orderProcessingService,
+                orderTotalCalculationService,
+                paymentService,
+                permissionService,
+                pictureService,
+                priceCalculationService,
+                priceFormatter,
+                productAttributeFormatter,
+                productService,
+                shippingService,
+                shoppingCartService,
+                stateProvinceService,
+                cacheManager,
+                storeContext,
+                taxService,
+                urlRecordService,
+                vendorService,
+                webHelper,
+                workContext,
+                mediaSettings,
                 orderSettings,
-                shippingSettings,
-                taxSettings,
-                captchaSettings,
-                addressSettings,
                 rewardPointsSettings,
-                customerSettings)
+                shippingSettings,
+                shoppingCartSettings,
+                taxSettings,
+                vendorSettings)
         {
             this._countryService = countryService;
             this._currencyService = currencyService;
+            this._genericAttributeService = genericAttributeService;
+            this._giftCardService = giftCardService;
             this._httpContextAccessor = httpContextAccessor;
             this._orderTotalCalculationService = orderTotalCalculationService;
             this._paymentService = paymentService;
             this._priceCalculationService = priceCalculationService;
             this._priceFormatter = priceFormatter;
-            this._productAttributeParser = productAttributeParser;
-            this._productService = productService;
+            this._shoppingCartService = shoppingCartService;
             this._stateProvinceService = stateProvinceService;
             this._storeContext = storeContext;
             this._taxService = taxService;
@@ -180,8 +195,8 @@ namespace Nop.Plugin.Tax.Avalara.Factories
             var order = new Order
             {
                 BillingAddress = _workContext.CurrentCustomer.BillingAddress,
-                CheckoutAttributesXml = _workContext.CurrentCustomer
-                    .GetAttribute<string>(SystemCustomerAttributeNames.CheckoutAttributes, processPaymentRequest.StoreId),
+                CheckoutAttributesXml = _genericAttributeService.GetAttribute<string>(_workContext.CurrentCustomer,
+                    NopCustomerDefaults.CheckoutAttributes, processPaymentRequest.StoreId),
                 Customer = _workContext.CurrentCustomer,
                 OrderGuid = processPaymentRequest.OrderGuid,
                 OrderShippingExclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, false) ?? 0,
@@ -195,7 +210,8 @@ namespace Nop.Plugin.Tax.Avalara.Factories
             //add pickup address
             if (_shippingSettings.AllowPickUpInStore)
             {
-                var pickupPoint = _workContext.CurrentCustomer.GetAttribute<PickupPoint>(SystemCustomerAttributeNames.SelectedPickupPoint, processPaymentRequest.StoreId);
+                var pickupPoint = _genericAttributeService.GetAttribute<PickupPoint>(_workContext.CurrentCustomer,
+                    NopCustomerDefaults.SelectedPickupPointAttribute, processPaymentRequest.StoreId);
                 if (pickupPoint != null)
                 {
                     var country = _countryService.GetCountryByTwoLetterIsoCode(pickupPoint.CountryCode);
@@ -279,7 +295,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
 
 
                 //shipping info
-                model.RequiresShipping = cart.RequiresShipping(_productService, _productAttributeParser);
+                model.RequiresShipping = _shoppingCartService.ShoppingCartRequiresShipping(cart);
                 if (model.RequiresShipping)
                 {
                     var shoppingCartShippingBase = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart);
@@ -289,7 +305,8 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                         model.Shipping = _priceFormatter.FormatShippingPrice(shoppingCartShipping, true);
 
                         //selected shipping method
-                        var shippingOption = _workContext.CurrentCustomer.GetAttribute<ShippingOption>(SystemCustomerAttributeNames.SelectedShippingOption, _storeContext.CurrentStore.Id);
+                        var shippingOption = _genericAttributeService.GetAttribute<ShippingOption>(_workContext.CurrentCustomer,
+                            NopCustomerDefaults.SelectedShippingOptionAttribute, _storeContext.CurrentStore.Id);
                         if (shippingOption != null)
                             model.SelectedShippingMethod = shippingOption.Name;
                     }
@@ -300,7 +317,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 }
 
                 //payment method fee
-                var paymentMethodSystemName = _workContext.CurrentCustomer.GetAttribute<string>(SystemCustomerAttributeNames.SelectedPaymentMethod, _storeContext.CurrentStore.Id);
+                var paymentMethodSystemName = _genericAttributeService.GetAttribute<string>(_workContext.CurrentCustomer, NopCustomerDefaults.SelectedPaymentMethodAttribute, _storeContext.CurrentStore.Id);
                 var paymentMethodAdditionalFee = _paymentService.GetAdditionalHandlingFee(cart, paymentMethodSystemName);
                 var paymentMethodAdditionalFeeWithTaxBase = _taxService.GetPaymentMethodAdditionalFee(paymentMethodAdditionalFee, _workContext.CurrentCustomer);
                 if (paymentMethodAdditionalFeeWithTaxBase > decimal.Zero)
@@ -386,7 +403,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                         var amountCanBeUsed = _currencyService.ConvertFromPrimaryStoreCurrency(appliedGiftCard.AmountCanBeUsed, _workContext.WorkingCurrency);
                         gcModel.Amount = _priceFormatter.FormatPrice(-amountCanBeUsed, true, false);
 
-                        var remainingAmountBase = appliedGiftCard.GiftCard.GetGiftCardRemainingAmount() - appliedGiftCard.AmountCanBeUsed;
+                        var remainingAmountBase = _giftCardService.GetGiftCardRemainingAmount(appliedGiftCard.GiftCard) - appliedGiftCard.AmountCanBeUsed;
                         var remainingAmount = _currencyService.ConvertFromPrimaryStoreCurrency(remainingAmountBase, _workContext.WorkingCurrency);
                         gcModel.Remaining = _priceFormatter.FormatPrice(remainingAmount, true, false);
 
@@ -403,18 +420,16 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 }
 
                 //reward points to be earned
-                if (_rewardPointsSettings.Enabled &&
-                    _rewardPointsSettings.DisplayHowMuchWillBeEarned &&
-                    shoppingCartTotalBase.HasValue)
+                if (_rewardPointsSettings.Enabled && _rewardPointsSettings.DisplayHowMuchWillBeEarned && shoppingCartTotalBase.HasValue)
                 {
-                    var shippingBaseInclTax = model.RequiresShipping
-                        ? _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, true)
-                        : 0;
-                    if (shippingBaseInclTax.HasValue)
-                    {
-                        var totalForRewardPoints = _orderTotalCalculationService.CalculateApplicableOrderTotalForRewardPoints(shippingBaseInclTax.Value, shoppingCartTotalBase.Value);
+                    //get shipping total
+                    var shippingBaseInclTax = !model.RequiresShipping ? 0 : _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, true) ?? 0;
+
+                    //get total for reward points
+                    var totalForRewardPoints = _orderTotalCalculationService
+                        .CalculateApplicableOrderTotalForRewardPoints(shippingBaseInclTax, shoppingCartTotalBase.Value);
+                    if (totalForRewardPoints > decimal.Zero)
                         model.WillEarnRewardPoints = _orderTotalCalculationService.CalculateRewardPoints(_workContext.CurrentCustomer, totalForRewardPoints);
-                    }
                 }
 
             }

@@ -93,7 +93,7 @@
     </div>
     @if (Model.IsConfigured)
     {
-        <script type="text/javascript">
+        <script>
             $(document).ready(function () {
                 $("#@Html.IdFor(model => model.TestAddress.CountryId)").change(function () {
                     var selectedItem = $(this).val();

@@ -6,6 +6,7 @@ using Nop.Services.Security;
 using Nop.Services.Tax;
 using Nop.Web.Areas.Admin.Models.Settings;
 using Nop.Web.Framework.Components;
+using Nop.Web.Framework.Infrastructure;
 
 namespace Nop.Plugin.Tax.Avalara.Components
 {
@@ -57,7 +58,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 return Content(string.Empty);
 
             //ensure that it's a proper widget zone
-            if (!widgetZone.Equals(AvalaraTaxDefaults.TaxSettingsWidgetZone))
+            if (!widgetZone.Equals(AdminWidgetZones.TaxSettingsTop))
                 return Content(string.Empty);
 
             //prepare model

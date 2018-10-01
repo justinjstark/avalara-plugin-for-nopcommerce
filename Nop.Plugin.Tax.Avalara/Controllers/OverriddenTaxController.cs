@@ -3,12 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalara.AvaTax.RestClient;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
 using Nop.Core;
 using Nop.Core.Caching;
 using Nop.Core.Domain.Cms;
 using Nop.Core.Domain.Tax;
-using Nop.Plugin.Tax.Avalara.Models.Tax;
 using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Cms;
 using Nop.Services.Common;
@@ -17,7 +15,9 @@ using Nop.Services.Localization;
 using Nop.Services.Security;
 using Nop.Services.Tax;
 using Nop.Web.Areas.Admin.Controllers;
-using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Factories;
+using Nop.Web.Areas.Admin.Infrastructure.Mapper.Extensions;
+using Nop.Web.Areas.Admin.Models.Tax;
 using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
@@ -35,6 +35,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         private readonly ISettingService _settingService;
         private readonly IStaticCacheManager _cacheManager;
         private readonly ITaxCategoryService _taxCategoryService;
+        private readonly ITaxModelFactory _taxModelFactory;
         private readonly ITaxService _taxService;
         private readonly IWidgetService _widgetService;
         private readonly IWorkContext _workContext;
@@ -48,19 +49,21 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         public OverriddenTaxController(AvalaraTaxManager avalaraTaxManager,
             IGenericAttributeService genericAttributeService,
             ILocalizationService localizationService,
-            IWidgetService widgetService,
-            WidgetSettings widgetSettings,
-            IStaticCacheManager cacheManager,
-            IWorkContext workContext,
-            ITaxService taxService,
-            ITaxCategoryService taxCategoryService,
-            TaxSettings taxSettings,
+            IPermissionService permissionService,
             ISettingService settingService,
-            IPermissionService permissionService) : base(taxService,
-                taxCategoryService,
-                taxSettings,
+            IStaticCacheManager cacheManager,
+            ITaxCategoryService taxCategoryService,
+            ITaxModelFactory taxModelFactory,
+            ITaxService taxService,
+            IWidgetService widgetService,
+            IWorkContext workContext,
+            TaxSettings taxSettings,
+            WidgetSettings widgetSettings) : base(permissionService,
                 settingService,
-                permissionService)
+                taxCategoryService,
+                taxModelFactory,
+                taxService,
+                taxSettings)
         {
             this._avalaraTaxManager = avalaraTaxManager;
             this._genericAttributeService = genericAttributeService;
@@ -69,6 +72,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             this._settingService = settingService;
             this._cacheManager = cacheManager;
             this._taxCategoryService = taxCategoryService;
+            this._taxModelFactory = taxModelFactory;
             this._taxService = taxService;
             this._widgetService = widgetService;
             this._workContext = workContext;
@@ -78,96 +82,34 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
         #endregion
 
-        #region Utilities
-
-        /// <summary>
-        /// Get Avalara pre-defined tax code types
-        /// </summary>
-        /// <returns>Key-value pairs of tax code types</returns>
-        private Dictionary<string, string> GetTaxCodeTypes()
-        {
-            return _cacheManager.Get(AvalaraTaxDefaults.TaxCodeTypesCacheKey, () => _avalaraTaxManager.GetTaxCodeTypes());
-        }
-
-        #endregion
-
         #region Methods
 
-        public override IActionResult Categories()
+        public override IActionResult List()
         {
             //ensure that Avalara tax provider is active
             if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
             {
                 //if isn't active return base action result
                 this.RouteData.Values["controller"] = "Tax";
-                return base.Categories();
+                return base.List();
             }
 
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
 
+            //prepare model
+            var model = _taxModelFactory.PrepareTaxConfigurationModel(new TaxConfigurationModel());
+
             //prepare available tax code types
-            var model = new TaxCategoryListModel
-            {
-                TaxCodeTypes = GetTaxCodeTypes()?
-                    .Select(taxCodeType => new SelectListItem { Value = taxCodeType.Key, Text = taxCodeType.Value }).ToList()
-                    ?? new[] { new SelectListItem { Value = Guid.Empty.ToString(), Text = string.Empty } }.ToList()
-            };
+            model.TaxCategories.CustomProperties.Add("TaxCodeTypes",
+                _cacheManager.Get(AvalaraTaxDefaults.TaxCodeTypesCacheKey, () => _avalaraTaxManager.GetTaxCodeTypes()));
 
             //use overridden view
-            return View("~/Plugins/Tax.Avalara/Views/Tax/Categories.cshtml", model);
+            return View("~/Plugins/Tax.Avalara/Views/Tax/List.cshtml", model);
         }
 
         [HttpPost]
-        public override IActionResult Categories(DataSourceRequest command)
-        {
-            //ensure that Avalara tax provider is active
-            if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
-                return base.Categories(command);
-
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
-                return AccessDeniedKendoGridJson();
-
-            //add pagination
-            var query = _taxCategoryService.GetAllTaxCategories().AsQueryable();
-            var taxCategories = new PagedList<TaxCategory>(query, command.Page - 1, command.PageSize);
-
-            //get tax types and define the default value
-            var taxTypes = GetTaxCodeTypes()?.Select(taxType => new { Id = taxType.Key, Name = taxType.Value });
-            var defaultType = taxTypes
-                ?.FirstOrDefault(taxType => taxType.Name.Equals("Unknown", StringComparison.InvariantCultureIgnoreCase))
-                ?? taxTypes?.FirstOrDefault();
-
-            //prepare model
-            var categoriesModel = taxCategories.Select(taxCategory =>
-            {
-                var model = new TaxCategoryModel
-                {
-                    Id = taxCategory.Id,
-                    Name = taxCategory.Name,
-                    DisplayOrder = taxCategory.DisplayOrder
-                };
-
-                //try to get previously saved tax code type and description
-                var taxCodeType = taxTypes
-                    ?.FirstOrDefault(type => type.Id.Equals(taxCategory.GetAttribute<string>(AvalaraTaxDefaults.TaxCodeTypeAttribute) ?? string.Empty))
-                    ?? defaultType;
-                model.Type = taxCodeType?.Name ?? string.Empty;
-                model.TypeId = taxCodeType?.Id ?? Guid.Empty.ToString();
-                model.Description = taxCategory.GetAttribute<string>(AvalaraTaxDefaults.TaxCodeDescriptionAttribute) ?? string.Empty;
-
-                return model;
-            });
-
-            return Json(new DataSourceResult
-            {
-                Data = categoriesModel,
-                Total = taxCategories.TotalCount
-            });
-        }
-
-        [HttpPost]
-        public IActionResult TaxCategoryUpdate(TaxCategoryModel model)
+        public IActionResult TaxCategoryUpdate(Models.Tax.TaxCategoryModel model)
         {
             //ensure that Avalara tax provider is active
             if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
@@ -191,7 +133,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         }
 
         [HttpPost]
-        public IActionResult TaxCategoryAdd(TaxCategoryModel model)
+        public IActionResult TaxCategoryAdd(Models.Tax.TaxCategoryModel model)
         {
             //ensure that Avalara tax provider is active
             if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
@@ -240,7 +182,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         public override IActionResult MarkAsPrimaryProvider(string systemName)
         {
             if (string.IsNullOrEmpty(systemName))
-                return RedirectToAction("Providers", "Tax");
+                return RedirectToAction("List", "Tax");
 
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
@@ -253,7 +195,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 _settingService.SaveSetting(_taxSettings);
 
                 //accordingly update widgets of Avalara tax provider
-                var avalaraWidgetIsActive = _widgetService.LoadWidgetBySystemName(AvalaraTaxDefaults.SystemName).IsWidgetActive(_widgetSettings);
+                var avalaraWidgetIsActive = _widgetService.IsWidgetActive(_widgetService.LoadWidgetBySystemName(AvalaraTaxDefaults.SystemName));
                 var avalaraTaxProviderIsActive = _taxSettings.ActiveTaxProviderSystemName.Equals(AvalaraTaxDefaults.SystemName);
                 if (avalaraTaxProviderIsActive)
                 {
@@ -268,16 +210,16 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 _settingService.SaveSetting(_widgetSettings);
             }
 
-            return RedirectToAction("Providers", "Tax");
+            return RedirectToAction("List", "Tax");
         }
 
-        [HttpPost, ActionName("Categories")]
+        [HttpPost, ActionName("List")]
         [FormValueRequired("importTaxCodes")]
         public IActionResult ImportTaxCodes()
         {
             //ensure that Avalara tax provider is active
             if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
-                return Categories();
+                return List();
 
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
@@ -287,7 +229,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             if (!systemTaxCodes?.Any() ?? true)
             {
                 ErrorNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TaxCodes.Import.Error"));
-                return Categories();
+                return List();
             }
 
             //get existing tax categories
@@ -319,16 +261,16 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             var successMessage = _localizationService.GetResource("Plugins.Tax.Avalara.TaxCodes.Import.Success");
             SuccessNotification(string.Format(successMessage, importedTaxCodesNumber));
 
-            return Categories();
+            return List();
         }
 
-        [HttpPost, ActionName("Categories")]
+        [HttpPost, ActionName("List")]
         [FormValueRequired("exportTaxCodes")]
         public IActionResult ExportTaxCodes()
         {
             //ensure that Avalara tax provider is active
             if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
-                return Categories();
+                return List();
 
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
@@ -340,7 +282,8 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
                 description = CommonHelper.EnsureMaximumLength(taxCategory.Name, 255),
                 isActive = true,
                 taxCode = CommonHelper.EnsureMaximumLength(taxCategory.Name, 25),
-                taxCodeTypeId = CommonHelper.EnsureMaximumLength(taxCategory.GetAttribute<string>(AvalaraTaxDefaults.TaxCodeTypeAttribute) ?? "P", 2)
+                taxCodeTypeId = CommonHelper.EnsureMaximumLength(_genericAttributeService
+                    .GetAttribute<string>(taxCategory, AvalaraTaxDefaults.TaxCodeTypeAttribute) ?? "P", 2)
             }).Where(taxCode => !string.IsNullOrEmpty(taxCode.taxCode)).ToList();
 
             //get existing tax codes (only active)
@@ -368,16 +311,16 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             else
                 SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TaxCodes.Export.AlreadyExported"));
 
-            return Categories();
+            return List();
         }
 
-        [HttpPost, ActionName("Categories")]
+        [HttpPost, ActionName("List")]
         [FormValueRequired("deleteTaxCodes")]
         public IActionResult DeleteSystemTaxCodes()
         {
             //ensure that Avalara tax provider is active
             if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider))
-                return Categories();
+                return List();
 
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
                 return AccessDeniedView();
@@ -387,7 +330,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             if (!systemTaxCodes?.Any() ?? true)
             {
                 ErrorNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error"));
-                return Categories();
+                return List();
             }
 
             //prepare tax categories to delete
@@ -406,7 +349,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
 
             SuccessNotification(_localizationService.GetResource("Plugins.Tax.Avalara.TaxCodes.Delete.Success"));
 
-            return Categories();
+            return List();
         }
         #endregion
     }

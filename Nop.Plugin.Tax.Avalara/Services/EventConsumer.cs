@@ -18,7 +18,7 @@ using Nop.Web.Areas.Admin.Models.Customers;
 using Nop.Web.Areas.Admin.Models.Orders;
 using Nop.Web.Areas.Admin.Models.Settings;
 using Nop.Web.Framework.Events;
-using Nop.Web.Framework.Mvc.Models;
+using Nop.Web.Framework.Models;
 
 namespace Nop.Plugin.Tax.Avalara.Services
 {
@@ -26,8 +26,8 @@ namespace Nop.Plugin.Tax.Avalara.Services
     /// Represents event consumer of Avalara tax provider
     /// </summary>
     public class EventConsumer :
-        IConsumer<EntityDeleted<Order>>,
-        IConsumer<ModelReceived<BaseNopModel>>,
+        IConsumer<EntityDeletedEvent<Order>>,
+        IConsumer<ModelReceivedEvent<BaseNopModel>>,
         IConsumer<OrderCancelledEvent>,
         IConsumer<OrderPlacedEvent>,
         IConsumer<OrderRefundedEvent>,
@@ -148,7 +148,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
         /// Handle order deleted event
         /// </summary>
         /// <param name="eventMessage">Event message</param>
-        public void HandleEvent(EntityDeleted<Order> eventMessage)
+        public void HandleEvent(EntityDeletedEvent<Order> eventMessage)
         {
             if (eventMessage.Entity == null)
                 return;
@@ -165,7 +165,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
         /// Handle model received event
         /// </summary>
         /// <param name="eventMessage">Event message</param>
-        public void HandleEvent(ModelReceived<BaseNopModel> eventMessage)
+        public void HandleEvent(ModelReceivedEvent<BaseNopModel> eventMessage)
         {
             SaveEntityUseCode(eventMessage?.Model as BaseNopEntityModel);
             SaveTaxOriginAddressType(eventMessage?.Model as TaxSettingsModel);

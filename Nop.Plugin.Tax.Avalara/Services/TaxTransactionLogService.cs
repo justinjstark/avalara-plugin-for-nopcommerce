@@ -12,13 +12,13 @@ namespace Nop.Plugin.Tax.Avalara.Services
     public class TaxTransactionLogService : ITaxTransactionLogService
     {
         #region Fields
-        
+
         private readonly IRepository<TaxTransactionLog> _taxTransactionLogRepository;
 
         #endregion
 
         #region Ctor
-        
+
         public TaxTransactionLogService(IRepository<TaxTransactionLog> taxTransactionLogRepository)
         {
             this._taxTransactionLogRepository = taxTransactionLogRepository;
@@ -32,14 +32,14 @@ namespace Nop.Plugin.Tax.Avalara.Services
         /// Get tax transaction log
         /// </summary>
         /// <param name="customerId">Customer identifier; pass null to load all records</param>
-        /// <param name="logType">Log type; pass null to load all records</param>
         /// <param name="createdFromUtc">Log item creation from; pass null to load all records</param>
         /// <param name="createdToUtc">Log item creation to; pass null to load all records</param>
         /// <param name="pageIndex">Page index</param>
         /// <param name="pageSize">Page size</param>
         /// <returns>Paged list of tax transaction log items</returns>
-        public virtual IPagedList<TaxTransactionLog> GetTaxTransactionLog(int? customerId = null, LogType? logType = null, 
-            DateTime? createdFromUtc = null, DateTime? createdToUtc = null, int pageIndex = 0, int pageSize = int.MaxValue)
+        public virtual IPagedList<TaxTransactionLog> GetTaxTransactionLog(int? customerId = null,
+            DateTime? createdFromUtc = null, DateTime? createdToUtc = null,
+            int pageIndex = 0, int pageSize = int.MaxValue)
         {
             //get all logs
             var query = _taxTransactionLogRepository.Table;
@@ -47,10 +47,6 @@ namespace Nop.Plugin.Tax.Avalara.Services
             //filter by customer
             if (customerId.HasValue)
                 query = query.Where(logItem => logItem.CustomerId == customerId);
-
-            //filter by log type
-            if (logType.HasValue)
-                query = query.Where(logItem => logItem.LogTypeId == (int)logType.Value);
 
             //filter by dates
             if (createdFromUtc.HasValue)

@@ -5,11 +5,9 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Nop.Core;
 using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Directory;
-using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Plugin.Tax.Avalara.Models.Configuration;
 using Nop.Plugin.Tax.Avalara.Models.Log;
 using Nop.Plugin.Tax.Avalara.Services;
-using Nop.Services;
 using Nop.Services.Configuration;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
@@ -111,11 +109,10 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         /// Prepare tax transaction log list model
         /// </summary>
         /// <param name="model">Tax transaction log list model</param>
-        private void PrepareLogModel(TaxTransactionLogListModel model)
+        private void PrepareLogModel(TaxTransactionLogSearchModel model)
         {
-            //populate list of available log types
-            model.AvailableLogTypes = LogType.Error.ToSelectList(false).ToList();
-            model.AvailableLogTypes.Insert(0, new SelectListItem { Text = _localizationService.GetResource("Admin.Common.All"), Value = "0" });
+            //prepare page parameters
+            model.SetGridPageSize();
         }
 
         #endregion
@@ -143,7 +140,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             PrepareAddress(model.TestAddress);
 
             //prepare tax transaction log model
-            PrepareLogModel(model.TaxTransactionLogListModel);
+            PrepareLogModel(model.TaxTransactionLogSearchModel);
 
             //get account company list (only active)
             var activeCompanies = _avalaraTaxManager.GetAccountCompanies(true);
@@ -266,7 +263,7 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
             //prepare model
             model.IsConfigured = IsConfigured();
             PrepareAddress(model.TestAddress);
-            PrepareLogModel(model.TaxTransactionLogListModel);
+            PrepareLogModel(model.TaxTransactionLogSearchModel);
 
             return View("~/Plugins/Tax.Avalara/Views/Configuration/Configure.cshtml", model);
         }

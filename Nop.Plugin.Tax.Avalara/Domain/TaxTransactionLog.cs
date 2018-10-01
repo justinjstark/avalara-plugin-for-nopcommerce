@@ -9,9 +9,24 @@ namespace Nop.Plugin.Tax.Avalara.Domain
     public partial class TaxTransactionLog : BaseEntity
     {
         /// <summary>
-        /// Gets or sets the message
+        /// Gets or sets the response status code
         /// </summary>
-        public string Message { get; set; }
+        public int StatusCode { get; set; }
+
+        /// <summary>
+        /// Gets or sets the requested URL
+        /// </summary>
+        public string Url { get; set; }
+
+        /// <summary>
+        /// Gets or sets the request message
+        /// </summary>
+        public string RequestMessage { get; set; }
+
+        /// <summary>
+        /// Gets or sets the response message
+        /// </summary>
+        public string ResponseMessage { get; set; }
 
         /// <summary>
         /// Gets or sets the customer identifier
@@ -22,19 +37,5 @@ namespace Nop.Plugin.Tax.Avalara.Domain
         /// Gets or sets the date and time of creation
         /// </summary>
         public DateTime CreatedDateUtc { get; set; }
-
-        /// <summary>
-        /// Gets or sets the log type identifier
-        /// </summary>
-        public int LogTypeId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the log type
-        /// </summary>
-        public LogType LogType
-        {
-            get { return (LogType)LogTypeId; }
-            set { LogTypeId = (int)value; }
-        }
     }
 }

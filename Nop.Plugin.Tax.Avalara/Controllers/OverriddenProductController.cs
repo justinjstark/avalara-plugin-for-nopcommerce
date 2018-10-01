@@ -4,19 +4,15 @@ using System.Linq;
 using Avalara.AvaTax.RestClient;
 using Microsoft.AspNetCore.Mvc;
 using Nop.Core;
-using Nop.Core.Caching;
-using Nop.Core.Domain.Directory;
-using Nop.Core.Domain.Tax;
 using Nop.Core.Domain.Vendors;
+using Nop.Core.Infrastructure;
 using Nop.Plugin.Tax.Avalara.Services;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Configuration;
 using Nop.Services.Customers;
-using Nop.Services.Directory;
 using Nop.Services.Discounts;
 using Nop.Services.ExportImport;
-using Nop.Services.Helpers;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
 using Nop.Services.Media;
@@ -24,11 +20,10 @@ using Nop.Services.Orders;
 using Nop.Services.Security;
 using Nop.Services.Seo;
 using Nop.Services.Shipping;
-using Nop.Services.Shipping.Date;
 using Nop.Services.Stores;
 using Nop.Services.Tax;
-using Nop.Services.Vendors;
 using Nop.Web.Areas.Admin.Controllers;
+using Nop.Web.Areas.Admin.Factories;
 
 namespace Nop.Plugin.Tax.Avalara.Controllers
 {
@@ -50,93 +45,70 @@ namespace Nop.Plugin.Tax.Avalara.Controllers
         #region Ctor
 
         public OverriddenProductController(AvalaraTaxManager avalaraTaxManager,
-            ITaxService taxService,
-            IProductService productService,
-            IProductTemplateService productTemplateService,
+            IAclService aclService,
+            IBackInStockSubscriptionService backInStockSubscriptionService,
             ICategoryService categoryService,
-            IManufacturerService manufacturerService,
+            ICopyProductService copyProductService,
+            ICustomerActivityService customerActivityService,
             ICustomerService customerService,
-            IUrlRecordService urlRecordService,
-            IWorkContext workContext,
+            IDiscountService discountService,
+            IDownloadService downloadService,
+            IExportManager exportManager,
+            IImportManager importManager,
             ILanguageService languageService,
             ILocalizationService localizationService,
             ILocalizedEntityService localizedEntityService,
-            ISpecificationAttributeService specificationAttributeService,
-            IPictureService pictureService,
-            ITaxCategoryService taxCategoryService,
-            IProductTagService productTagService,
-            ICopyProductService copyProductService,
+            IManufacturerService manufacturerService,
+            INopFileProvider fileProvider,
             IPdfService pdfService,
-            IExportManager exportManager,
-            IImportManager importManager,
-            ICustomerActivityService customerActivityService,
             IPermissionService permissionService,
-            IAclService aclService,
-            IStoreService storeService,
-            IOrderService orderService,
-            IStoreMappingService storeMappingService,
-            IVendorService vendorService,
-            IDateRangeService dateRangeService,
-            IShippingService shippingService,
-            IShipmentService shipmentService,
-            ICurrencyService currencyService,
-            CurrencySettings currencySettings,
-            IMeasureService measureService,
-            MeasureSettings measureSettings,
-            IStaticCacheManager cacheManager,
-            IDateTimeHelper dateTimeHelper,
-            IDiscountService discountService,
-            IProductAttributeService productAttributeService,
-            IBackInStockSubscriptionService backInStockSubscriptionService,
-            IShoppingCartService shoppingCartService,
-            IProductAttributeFormatter productAttributeFormatter,
+            IPictureService pictureService,
             IProductAttributeParser productAttributeParser,
-            IDownloadService downloadService,
+            IProductAttributeService productAttributeService,
+            IProductModelFactory productModelFactory,
+            IProductService productService,
+            IProductTagService productTagService,
             ISettingService settingService,
-            TaxSettings taxSettings,
-            VendorSettings vendorSettings) : base(productService,
-                productTemplateService,
+            IShippingService shippingService,
+            IShoppingCartService shoppingCartService,
+            ISpecificationAttributeService specificationAttributeService,
+            IStoreMappingService storeMappingService,
+            IStoreService storeService,
+            ITaxCategoryService taxCategoryService,
+            ITaxService taxService,
+            IUrlRecordService urlRecordService,
+            IWorkContext workContext,
+            VendorSettings vendorSettings) : base(aclService,
+                backInStockSubscriptionService,
                 categoryService,
-                manufacturerService,
+                copyProductService,
+                customerActivityService,
                 customerService,
-                urlRecordService,
-                workContext,
+                discountService,
+                downloadService,
+                exportManager,
+                importManager,
                 languageService,
                 localizationService,
                 localizedEntityService,
-                specificationAttributeService,
-                pictureService,
-                taxCategoryService,
-                productTagService,
-                copyProductService,
+                manufacturerService,
+                fileProvider,
                 pdfService,
-                exportManager,
-                importManager,
-                customerActivityService,
                 permissionService,
-                aclService,
-                storeService,
-                orderService,
-                storeMappingService,
-                vendorService,
-                dateRangeService,
-                shippingService,
-                shipmentService,
-                currencyService,
-                currencySettings,
-                measureService,
-                measureSettings,
-                cacheManager,
-                dateTimeHelper,
-                discountService,
-                productAttributeService,
-                backInStockSubscriptionService,
-                shoppingCartService,
-                productAttributeFormatter,
+                pictureService,
                 productAttributeParser,
-                downloadService,
+                productAttributeService,
+                productModelFactory,
+                productService,
+                productTagService,
                 settingService,
-                taxSettings,
+                shippingService,
+                shoppingCartService,
+                specificationAttributeService,
+                storeMappingService,
+                storeService,
+                urlRecordService,
+                workContext,
                 vendorSettings)
         {
             this._avalaraTaxManager = avalaraTaxManager;

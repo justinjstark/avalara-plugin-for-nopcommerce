@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using Nop.Core;
 using Nop.Core.Domain.Customers;
@@ -45,87 +44,87 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
         #region Ctor
 
-        public OverriddenOrderProcessingService(IOrderService orderService,
-            IWebHelper webHelper,
-            ILocalizationService localizationService,
-            ILanguageService languageService,
-            IProductService productService,
-            IPaymentService paymentService,
-            ILogger logger,
-            IOrderTotalCalculationService orderTotalCalculationService,
-            IPriceCalculationService priceCalculationService,
-            IPriceFormatter priceFormatter,
-            IProductAttributeParser productAttributeParser,
-            IProductAttributeFormatter productAttributeFormatter,
-            IGiftCardService giftCardService,
-            IShoppingCartService shoppingCartService,
+        public OverriddenOrderProcessingService(CurrencySettings currencySettings,
+            IAffiliateService affiliateService,
             ICheckoutAttributeFormatter checkoutAttributeFormatter,
-            IShippingService shippingService,
-            IShipmentService shipmentService,
-            ITaxService taxService,
+            ICountryService countryService,
+            ICurrencyService currencyService,
+            ICustomerActivityService customerActivityService,
             ICustomerService customerService,
+            ICustomNumberFormatter customNumberFormatter,
             IDiscountService discountService,
             IEncryptionService encryptionService,
+            IEventPublisher eventPublisher,
+            IGenericAttributeService genericAttributeService,
+            IGiftCardService giftCardService,
+            ILanguageService languageService,
+            ILocalizationService localizationService,
+            ILogger logger,
+            IOrderService orderService,
+            IOrderTotalCalculationService orderTotalCalculationService,
+            IPaymentService paymentService,
+            IPdfService pdfService,
+            IPriceCalculationService priceCalculationService,
+            IPriceFormatter priceFormatter,
+            IProductAttributeFormatter productAttributeFormatter,
+            IProductAttributeParser productAttributeParser,
+            IProductService productService,
+            IRewardPointService rewardPointService,
+            IShipmentService shipmentService,
+            IShippingService shippingService,
+            IShoppingCartService shoppingCartService,
+            IStateProvinceService stateProvinceService,
+            ITaxService taxService,
+            IVendorService vendorService,
+            IWebHelper webHelper,
             IWorkContext workContext,
             IWorkflowMessageService workflowMessageService,
-            IVendorService vendorService,
-            ICustomerActivityService customerActivityService,
-            ICurrencyService currencyService,
-            IAffiliateService affiliateService,
-            IEventPublisher eventPublisher,
-            IPdfService pdfService,
-            IRewardPointService rewardPointService,
-            IGenericAttributeService genericAttributeService,
-            ICountryService countryService,
-            IStateProvinceService stateProvinceService,
-            ShippingSettings shippingSettings,
+            LocalizationSettings localizationSettings,
+            OrderSettings orderSettings,
             PaymentSettings paymentSettings,
             RewardPointsSettings rewardPointsSettings,
-            OrderSettings orderSettings,
-            TaxSettings taxSettings,
-            LocalizationSettings localizationSettings,
-            CurrencySettings currencySettings,
-            ICustomNumberFormatter customNumberFormatter) : base(orderService,
-                webHelper,
-                localizationService,
-                languageService,
-                productService,
-                paymentService,
-                logger,
-                orderTotalCalculationService,
-                priceCalculationService,
-                priceFormatter,
-                productAttributeParser,
-                productAttributeFormatter,
-                giftCardService,
-                shoppingCartService,
+            ShippingSettings shippingSettings,
+            TaxSettings taxSettings) : base(currencySettings,
+                affiliateService,
                 checkoutAttributeFormatter,
-                shippingService,
-                shipmentService,
-                taxService,
+                countryService,
+                currencyService,
+                customerActivityService,
                 customerService,
+                customNumberFormatter,
                 discountService,
                 encryptionService,
+                eventPublisher,
+                genericAttributeService,
+                giftCardService,
+                languageService,
+                localizationService,
+                logger,
+                orderService,
+                orderTotalCalculationService,
+                paymentService,
+                pdfService,
+                priceCalculationService,
+                priceFormatter,
+                productAttributeFormatter,
+                productAttributeParser,
+                productService,
+                rewardPointService,
+                shipmentService,
+                shippingService,
+                shoppingCartService,
+                stateProvinceService,
+                taxService,
+                vendorService,
+                webHelper,
                 workContext,
                 workflowMessageService,
-                vendorService,
-                customerActivityService,
-                currencyService,
-                affiliateService,
-                eventPublisher,
-                pdfService,
-                rewardPointService,
-                genericAttributeService,
-                countryService,
-                stateProvinceService,
-                shippingSettings,
+                localizationSettings,
+                orderSettings,
                 paymentSettings,
                 rewardPointsSettings,
-                orderSettings,
-                taxSettings,
-                localizationSettings,
-                currencySettings,
-                customNumberFormatter)
+                shippingSettings,
+                taxSettings)
         {
             this._customerActivityService = customerActivityService;
             this._customerService = customerService;
@@ -201,7 +200,8 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
                     //reset checkout data
                     _customerService.ResetCheckoutData(details.Customer, processPaymentRequest.StoreId, clearCouponCodes: true, clearCheckoutAttributes: true);
-                    _customerActivityService.InsertActivity("PublicStore.PlaceOrder", _localizationService.GetResource("ActivityLog.PublicStore.PlaceOrder"), order.Id);
+                    _customerActivityService.InsertActivity("PublicStore.PlaceOrder",
+                        string.Format(_localizationService.GetResource("ActivityLog.PublicStore.PlaceOrder"), order.Id), order);
 
                     //check order status
                     CheckOrderStatus(order);
@@ -232,34 +232,6 @@ namespace Nop.Plugin.Tax.Avalara.Services
             _logger.Error(logError, customer: customer);
 
             return result;
-        }
-
-        /// <summary>
-        /// Voids order (from admin panel)
-        /// </summary>
-        /// <param name="order">Order</param>
-        /// <returns>Voided order</returns>
-        public override IList<string> Void(Order order)
-        {
-            var errors = base.Void(order);
-
-            //raise event
-            if (!errors?.Any() ?? true)
-                _eventPublisher.Publish(new OrderVoidedEvent(order));
-
-            return errors;
-        }
-
-        /// <summary>
-        /// Voids order (offline)
-        /// </summary>
-        /// <param name="order">Order</param>
-        public override void VoidOffline(Order order)
-        {
-            base.VoidOffline(order);
-
-            //raise event       
-            _eventPublisher.Publish(new OrderVoidedEvent(order));
         }
 
         #endregion

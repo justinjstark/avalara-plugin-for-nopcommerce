@@ -18,6 +18,8 @@ using Nop.Web.Areas.Admin.Models.Catalog;
 using Nop.Web.Areas.Admin.Models.Customers;
 using Nop.Web.Areas.Admin.Models.Orders;
 using Nop.Web.Framework.Components;
+using Nop.Web.Framework.Infrastructure;
+using Nop.Web.Framework.Models;
 
 namespace Nop.Plugin.Tax.Avalara.Components
 {
@@ -32,6 +34,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
         private readonly AvalaraTaxManager _avalaraTaxManager;
         private readonly ICheckoutAttributeService _checkoutAttributeService;
         private readonly ICustomerService _customerService;
+        private readonly IGenericAttributeService _genericAttributeService;
         private readonly ILocalizationService _localizationService;
         private readonly IPermissionService _permissionService;
         private readonly IProductService _productService;
@@ -46,6 +49,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
         public EntityUseCodeViewComponent(AvalaraTaxManager avalaraTaxManager,
             ICheckoutAttributeService checkoutAttributeService,
             ICustomerService customerService,
+            IGenericAttributeService genericAttributeService,
             ILocalizationService localizationService,
             IPermissionService permissionService,
             IProductService productService,
@@ -56,6 +60,7 @@ namespace Nop.Plugin.Tax.Avalara.Components
             this._avalaraTaxManager = avalaraTaxManager;
             this._checkoutAttributeService = checkoutAttributeService;
             this._customerService = customerService;
+            this._genericAttributeService = genericAttributeService;
             this._localizationService = localizationService;
             this._permissionService = permissionService;
             this._productService = productService;
@@ -76,8 +81,8 @@ namespace Nop.Plugin.Tax.Avalara.Components
         /// <returns>View component result</returns>
         public IViewComponentResult Invoke(string widgetZone, object additionalData)
         {
-            //ensure that model identifier is passed
-            if (!(additionalData is int modelId) || modelId == 0)
+            //ensure that model is passed
+            if (!(additionalData is BaseNopEntityModel entityModel))
                 return Content(string.Empty);
 
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageTaxSettings))
@@ -88,10 +93,10 @@ namespace Nop.Plugin.Tax.Avalara.Components
                 return Content(string.Empty);
 
             //ensure that it's a proper widget zone
-            if (!widgetZone.Equals(AvalaraTaxDefaults.CustomerDetailsWidgetZone) &&
-                !widgetZone.Equals(AvalaraTaxDefaults.CustomerRoleDetailsWidgetZone) &&
-                !widgetZone.Equals(AvalaraTaxDefaults.ProductDetailsWidgetZone) &&
-                !widgetZone.Equals(AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone))
+            if (!widgetZone.Equals(AdminWidgetZones.CustomerDetailsInfoTop) &&
+                !widgetZone.Equals(AdminWidgetZones.CustomerRoleDetailsTop) &&
+                !widgetZone.Equals(AdminWidgetZones.ProductDetailsInfoColumnLeftTop) &&
+                !widgetZone.Equals(AdminWidgetZones.CheckoutAttributeDetailsInfoTop))
             {
                 return Content(string.Empty);
             }
@@ -115,42 +120,39 @@ namespace Nop.Plugin.Tax.Avalara.Components
             //prepare model
             var model = new EntityUseCodeModel
             {
-                Id = modelId,
+                Id = entityModel.Id,
                 EntityUseCodes = entityUseCodes
             };
 
             //get entity by the model identifier
             BaseEntity entity = null;
-            if (widgetZone.Equals(AvalaraTaxDefaults.CustomerDetailsWidgetZone))
+            if (widgetZone.Equals(AdminWidgetZones.CustomerDetailsInfoTop))
             {
-                var customerModel = new CustomerModel();
-                model.PrecedingElementId = nameof(customerModel.IsTaxExempt);
-                entity = _customerService.GetCustomerById(modelId);
+                model.PrecedingElementId = nameof(CustomerModel.IsTaxExempt);
+                entity = _customerService.GetCustomerById(entityModel.Id);
             }
 
-            if (widgetZone.Equals(AvalaraTaxDefaults.CustomerRoleDetailsWidgetZone))
+            if (widgetZone.Equals(AdminWidgetZones.CustomerRoleDetailsTop))
             {
-                var customerModel = new CustomerRoleModel();
-                model.PrecedingElementId = nameof(customerModel.TaxExempt);
-                entity = _customerService.GetCustomerRoleById(modelId);
+                model.PrecedingElementId = nameof(CustomerRoleModel.TaxExempt);
+                entity = _customerService.GetCustomerRoleById(entityModel.Id);
             }
 
-            if (widgetZone.Equals(AvalaraTaxDefaults.ProductDetailsWidgetZone))
+            if (widgetZone.Equals(AdminWidgetZones.ProductDetailsInfoColumnLeftTop))
             {
-                var customerModel = new ProductModel();
-                model.PrecedingElementId = nameof(customerModel.IsTaxExempt);
-                entity = _productService.GetProductById(modelId);
+                model.PrecedingElementId = nameof(ProductModel.IsTaxExempt);
+                entity = _productService.GetProductById(entityModel.Id);
             }
 
-            if (widgetZone.Equals(AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone))
+            if (widgetZone.Equals(AdminWidgetZones.CheckoutAttributeDetailsInfoTop))
             {
-                var customerModel = new CheckoutAttributeModel();
-                model.PrecedingElementId = nameof(customerModel.IsTaxExempt);
-                entity = _checkoutAttributeService.GetCheckoutAttributeById(modelId);
+                model.PrecedingElementId = nameof(CheckoutAttributeModel.IsTaxExempt);
+                entity = _checkoutAttributeService.GetCheckoutAttributeById(entityModel.Id);
             }
 
             //try to get previously saved entity use code
-            model.AvalaraEntityUseCode = entity?.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute) ?? defaultValue;
+            model.AvalaraEntityUseCode = entity == null ? defaultValue :
+                _genericAttributeService.GetAttribute<string>(entity, AvalaraTaxDefaults.EntityUseCodeAttribute);
 
             return View("~/Plugins/Tax.Avalara/Views/EntityUseCode/EntityUseCode.cshtml", model);
         }

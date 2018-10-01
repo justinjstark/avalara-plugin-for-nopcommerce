@@ -1,6 +1,6 @@
 ﻿@model Nop.Plugin.Tax.Avalara.Models.Settings.TaxOriginAddressTypeModel
 
-<script type='text/javascript'>
+<script>
     $(document).ready(function() {
         $('#@Model.PrecedingElementId').closest('.form-group')
             .after(`@Html.Partial("~/Plugins/Tax.Avalara/Views/Settings/_TaxOriginAddressTypeField.cshtml", Model)`);

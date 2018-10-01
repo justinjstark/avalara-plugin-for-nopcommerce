@@ -2,7 +2,7 @@
     
 @if (Model.Id > 0)
 {
-    <script type='text/javascript'>
+    <script>
         $(document).ready(function() {
             $('#@Model.PrecedingElementId').closest('.form-group')
                 .after(`@Html.Partial("~/Plugins/Tax.Avalara/Views/EntityUseCode/_EntityUseCodeField.cshtml", Model)`);

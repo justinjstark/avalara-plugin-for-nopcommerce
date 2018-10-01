@@ -1,6 +1,4 @@
-﻿@model Nop.Plugin.Tax.Avalara.Models.Log.TaxTransactionLogListModel
-
-@inject Nop.Core.Domain.Common.AdminAreaSettings adminAreaSettings
+﻿@model Nop.Plugin.Tax.Avalara.Models.Configuration.ConfigurationModel
 
 <div class="panel-group">
     <div class="panel panel-default">
@@ -9,26 +7,18 @@
                 <div class="col-md-6">
                     <div class="form-group">
                         <div class="col-md-4">
-                            <nop-label asp-for="CreatedFrom" />
+                            <nop-label asp-for="@Model.TaxTransactionLogSearchModel.CreatedFrom" />
                         </div>
                         <div class="col-md-8">
-                            <nop-editor asp-for="CreatedFrom" />
+                            <nop-editor asp-for="@Model.TaxTransactionLogSearchModel.CreatedFrom" />
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="col-md-4">
-                            <nop-label asp-for="CreatedTo" />
+                            <nop-label asp-for="@Model.TaxTransactionLogSearchModel.CreatedTo" />
                         </div>
                         <div class="col-md-8">
-                            <nop-editor asp-for="CreatedTo" />
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <div class="col-md-4">
-                            <nop-label asp-for="LogTypeId" />
-                        </div>
-                        <div class="col-md-8">
-                            <nop-select asp-for="LogTypeId" asp-items="Model.AvailableLogTypes" />
+                            <nop-editor asp-for="@Model.TaxTransactionLogSearchModel.CreatedTo" />
                         </div>
                     </div>
                     <div class="form-group">
@@ -47,8 +37,8 @@
     <div class="panel panel-default">
         <div class="panel-body">
             <div id="log-grid"></div>
-
-            <script type="text/javascript">
+            
+            <script>
                 $(document).ready(function() {
                     $("#log-grid").kendoGrid({
                         dataSource: {
@@ -58,7 +48,14 @@
                                     url: "@Html.Raw(Url.Action("LogList", "TaxTransactionLog"))",
                                     type: "POST",
                                     dataType: "json",
-                                    data: additionalData
+                                    data: function() {
+                                        var data = {
+                                            CreatedFrom: $('#@Html.IdFor(model => model.TaxTransactionLogSearchModel.CreatedFrom)').val(),
+                                            CreatedTo: $('#@Html.IdFor(model => model.TaxTransactionLogSearchModel.CreatedTo)').val(),
+                                        };
+                                        addAntiForgeryToken(data);
+                                        return data;
+                                    }
                                 }
                             },
                             schema: {
@@ -70,14 +67,14 @@
                                 display_kendoui_grid_error(e);
                                 this.cancelChanges();
                             },
-                            pageSize: @(adminAreaSettings.DefaultGridPageSize),
+                            pageSize: @(Model.TaxTransactionLogSearchModel.PageSize),
                             serverPaging: true,
                             serverFiltering: true,
                             serverSorting: true
                         },
                         pageable: {
                             refresh: true,
-                            pageSizes: [@(adminAreaSettings.GridPageSizes)],
+                            pageSizes: [@(Model.TaxTransactionLogSearchModel.AvailablePageSizes)],
                             @await Html.PartialAsync("_GridPagerMessages")
                         },
                         toolbar: [{
@@ -86,13 +83,11 @@
                         scrollable: false,
                         columns: [
                         {
-                            field: "LogType",
-                            title: "@T("Plugins.Tax.Avalara.Log.LogType")",
-                            width: 200
+                            field: "StatusCode",
+                            title: "@T("Plugins.Tax.Avalara.Log.StatusCode")",
                         }, {
-                            field: "Message",
-                            title: "@T("Plugins.Tax.Avalara.Log.Message")",
-                            encoded: false
+                            field: "Url",
+                            title: "@T("Plugins.Tax.Avalara.Log.Url")",
                         }, {
                             field: "CreatedDate",
                             title: "@T("Plugins.Tax.Avalara.Log.CreatedDate")",
@@ -109,6 +104,12 @@
                         }
                         ]
                     });
+
+                     $('#search-log').click(function() {
+                        var grid = $('#log-grid').data('kendoGrid');
+                        grid.dataSource.page(1);
+                        return false;
+                    });
                 });
 
                 function clearLog() {
@@ -116,31 +117,11 @@
                         cache: false,
                         type: "GET",
                         url: '@(Url.Action("ClearAll", "TaxTransactionLog"))',
-                        success: function (data) {
+                        success: function () {
                             var grid = $('#log-grid').data('kendoGrid');
                             grid.dataSource.page(1);
                         }
                     });
-                }
-            </script>
-
-            <script type="text/javascript">
-                $(document).ready(function() {
-                    $('#search-log').click(function() {
-                        var grid = $('#log-grid').data('kendoGrid');
-                        grid.dataSource.page(1);
-                        return false;
-                    });
-                });
-
-                function additionalData() {
-                    var data = {
-                        CreatedFrom: $('#@Html.IdFor(model => model.CreatedFrom)').val(),
-                        CreatedTo: $('#@Html.IdFor(model => model.CreatedTo)').val(),
-                        LogTypeId: $('#@Html.IdFor(model => model.LogTypeId)').val()
-                    };
-                    addAntiForgeryToken(data);
-                    return data;
                 }
             </script>
         </div>

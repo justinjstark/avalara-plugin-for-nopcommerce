@@ -23,6 +23,7 @@ using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Orders;
 using Nop.Services.Tax;
+using Nop.Web.Framework.Infrastructure;
 
 namespace Nop.Plugin.Tax.Avalara
 {
@@ -42,7 +43,7 @@ namespace Nop.Plugin.Tax.Avalara
         private readonly ICustomerService _customerService;
         private readonly IGenericAttributeService _genericAttributeService;
         private readonly IGeoLookupService _geoLookupService;
-        private readonly IProductAttributeParser _productAttributeParser;
+        private readonly ILocalizationService _localizationService;
         private readonly IProductService _productService;
         private readonly ISettingService _settingService;
         private readonly IStaticCacheManager _cacheManager;
@@ -67,7 +68,7 @@ namespace Nop.Plugin.Tax.Avalara
             ICustomerService customerService,
             IGenericAttributeService genericAttributeService,
             IGeoLookupService geoLookupService,
-            IProductAttributeParser productAttributeParser,
+            ILocalizationService localizationService,
             IProductService productService,
             ISettingService settingService,
             IStaticCacheManager cacheManager,
@@ -88,7 +89,7 @@ namespace Nop.Plugin.Tax.Avalara
             this._customerService = customerService;
             this._genericAttributeService = genericAttributeService;
             this._geoLookupService = geoLookupService;
-            this._productAttributeParser = productAttributeParser;
+            this._localizationService = localizationService;
             this._productService = productService;
             this._settingService = settingService;
             this._cacheManager = cacheManager;
@@ -154,8 +155,11 @@ namespace Nop.Plugin.Tax.Avalara
                 transactionModel.exemptionNo = CommonHelper.EnsureMaximumLength($"Exempt-{exemptedCustomerRole.Name}", 25);
 
             //whether entity use code is set
-            var entityUseCode = order.Customer?.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute)
-                ?? exemptedCustomerRole?.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute);
+            var entityUseCode = order.Customer != null ? _genericAttributeService
+                    .GetAttribute<string>(order.Customer, AvalaraTaxDefaults.EntityUseCodeAttribute)
+                : exemptedCustomerRole != null ? _genericAttributeService
+                    .GetAttribute<string>(exemptedCustomerRole, AvalaraTaxDefaults.EntityUseCodeAttribute)
+                : null;
             if (!string.IsNullOrEmpty(entityUseCode))
                 transactionModel.customerUsageType = CommonHelper.EnsureMaximumLength(entityUseCode, 25);
 
@@ -318,7 +322,8 @@ namespace Nop.Plugin.Tax.Avalara
                         ? CommonHelper.EnsureMaximumLength($"Exempt-product-#{orderItem.Product.Id}", 25) : null,
 
                     //set SKU as item code
-                    itemCode = CommonHelper.EnsureMaximumLength(orderItem.Product?.FormatSku(orderItem.AttributesXml, _productAttributeParser), 50),
+                    itemCode = CommonHelper.EnsureMaximumLength(orderItem.Product != null ?
+                        _productService.FormatSku(orderItem.Product, orderItem.AttributesXml) : string.Empty, 50),
 
                     quantity = orderItem.Quantity
                 };
@@ -327,10 +332,10 @@ namespace Nop.Plugin.Tax.Avalara
                 var useEuVatRules = _taxSettings.EuVatEnabled
                     && (orderItem.Product?.IsTelecommunicationsOrBroadcastingOrElectronicServices ?? false)
                     && ((order.BillingAddress.Country
-                        ?? _countryService.GetCountryById(order.Customer.GetAttribute<int>(SystemCustomerAttributeNames.CountryId))
+                        ?? _countryService.GetCountryById(_genericAttributeService.GetAttribute<int>(order.Customer, NopCustomerDefaults.CountryIdAttribute))
                         ?? _countryService.GetCountryByTwoLetterIsoCode(_geoLookupService.LookupCountryIsoCode(order.Customer.LastIpAddress)))
                         ?.SubjectToVat ?? false)
-                    && order.Customer.GetAttribute<int>(SystemCustomerAttributeNames.VatNumberStatusId) != (int)VatNumberStatus.Valid;
+                    && _genericAttributeService.GetAttribute<int>(order.Customer, NopCustomerDefaults.VatNumberStatusIdAttribute) != (int)VatNumberStatus.Valid;
                 if (useEuVatRules)
                 {
                     var destinationAddress = MapAddress(order.BillingAddress);
@@ -343,7 +348,8 @@ namespace Nop.Plugin.Tax.Avalara
                 item.taxCode = CommonHelper.EnsureMaximumLength(productTaxCategory?.Name, 25);
 
                 //whether entity use code is set
-                var entityUseCode = orderItem.Product?.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute);
+                var entityUseCode = orderItem.Product != null
+                    ? _genericAttributeService.GetAttribute<string>(orderItem.Product, AvalaraTaxDefaults.EntityUseCodeAttribute) : null;
                 if (!string.IsNullOrEmpty(entityUseCode))
                     item.customerUsageType = CommonHelper.EnsureMaximumLength(entityUseCode, 25);
 
@@ -463,7 +469,8 @@ namespace Nop.Plugin.Tax.Avalara
                 }
 
                 //whether entity use code is set
-                var entityUseCode = attributeValue.CheckoutAttribute.GetAttribute<string>(AvalaraTaxDefaults.EntityUseCodeAttribute);
+                var entityUseCode = _genericAttributeService
+                    .GetAttribute<string>(attributeValue.CheckoutAttribute, AvalaraTaxDefaults.EntityUseCodeAttribute);
                 if (!string.IsNullOrEmpty(entityUseCode))
                     checkoutAttributeItem.customerUsageType = CommonHelper.EnsureMaximumLength(entityUseCode, 25);
 
@@ -495,7 +502,7 @@ namespace Nop.Plugin.Tax.Avalara
 
             //we don't use standard way _cacheManager.Get() due the need write errors to CalculateTaxResult
             if (_cacheManager.IsSet(cacheKey))
-                return new CalculateTaxResult { TaxRate = _cacheManager.Get<decimal>(cacheKey) };
+                return new CalculateTaxResult { TaxRate = _cacheManager.Get<decimal>(cacheKey, () => default(decimal)) };
 
             //get estimated tax
             var totalTax = GetEstimatedTax(calculateTaxRequest.Address, calculateTaxRequest.Customer?.Id.ToString());
@@ -591,7 +598,7 @@ namespace Nop.Plugin.Tax.Avalara
             var refundTransaction = new RefundTransactionModel
             {
                 referenceCode = CommonHelper.EnsureMaximumLength(transaction.code, 50),
-                refundDate = transaction.date,
+                refundDate = transaction.date ?? DateTime.UtcNow,
                 refundType = RefundType.Full
             };
 
@@ -622,56 +629,45 @@ namespace Nop.Plugin.Tax.Avalara
         {
             return new List<string>
             {
-                AvalaraTaxDefaults.CustomerDetailsWidgetZone,
-                AvalaraTaxDefaults.CustomerRoleDetailsWidgetZone,
-
-                //for some reason managers of Avalara said to remove "entity use code" feature for products, thus we commented it
-                //AvalaraTaxDefaults.ProductDetailsWidgetZone,
-                //AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone,
-
-                AvalaraTaxDefaults.TaxSettingsWidgetZone,
-                AvalaraTaxDefaults.ProductListButtonsWidgetZone,
-                AvalaraTaxDefaults.TaxCategoriesButtonsWidgetZone,
-                AvalaraTaxDefaults.CheckoutConfirmPageWidgetZone,
-                AvalaraTaxDefaults.OnePageCheckoutConfirmPageWidgetZone
+                AdminWidgetZones.CustomerDetailsInfoTop,
+                AdminWidgetZones.CustomerRoleDetailsTop,
+                AdminWidgetZones.TaxSettingsTop,
+                AdminWidgetZones.ProductListButtons,
+                AdminWidgetZones.TaxCategoryListButtons,
+                PublicWidgetZones.CheckoutConfirmTop,
+                PublicWidgetZones.OpCheckoutConfirmTop
             };
         }
 
         /// <summary>
-        /// Gets a view component for displaying plugin in public store
+        /// Gets a name of a view component for displaying widget
         /// </summary>
         /// <param name="widgetZone">Name of the widget zone</param>
-        /// <param name="viewComponentName">View component name</param>
-        public void GetPublicViewComponent(string widgetZone, out string viewComponentName)
+        /// <returns>View component name</returns>
+        public string GetWidgetViewComponentName(string widgetZone)
         {
-            switch (widgetZone)
+            if (widgetZone.Equals(AdminWidgetZones.CustomerDetailsInfoTop) ||
+                widgetZone.Equals(AdminWidgetZones.CustomerRoleDetailsTop))
             {
-                case AvalaraTaxDefaults.CustomerDetailsWidgetZone:
-                case AvalaraTaxDefaults.CustomerRoleDetailsWidgetZone:
-                case AvalaraTaxDefaults.ProductDetailsWidgetZone:
-                case AvalaraTaxDefaults.CheckoutAttributeDetailsWidgetZone:
-                    viewComponentName = AvalaraTaxDefaults.EntityUseCodeViewComponentName;
-                    return;
-
-                case AvalaraTaxDefaults.TaxSettingsWidgetZone:
-                    viewComponentName = AvalaraTaxDefaults.TaxOriginViewComponentName;
-                    return;
-
-                case AvalaraTaxDefaults.ProductListButtonsWidgetZone:
-                    viewComponentName = AvalaraTaxDefaults.ExportItemsViewComponentName;
-                    return;
-
-                case AvalaraTaxDefaults.TaxCategoriesButtonsWidgetZone:
-                    viewComponentName = AvalaraTaxDefaults.TaxCodesViewComponentName;
-                    return;
-
-                case AvalaraTaxDefaults.CheckoutConfirmPageWidgetZone:
-                case AvalaraTaxDefaults.OnePageCheckoutConfirmPageWidgetZone:
-                    viewComponentName = AvalaraTaxDefaults.AddressValidationViewComponentName;
-                    return;
+                return AvalaraTaxDefaults.EntityUseCodeViewComponentName;
             }
 
-            viewComponentName = null;
+            if (widgetZone.Equals(AdminWidgetZones.TaxSettingsTop))
+                return AvalaraTaxDefaults.TaxOriginViewComponentName;
+
+            if (widgetZone.Equals(AdminWidgetZones.ProductListButtons))
+                return AvalaraTaxDefaults.ExportItemsViewComponentName;
+
+            if (widgetZone.Equals(AdminWidgetZones.TaxCategoryListButtons))
+                return AvalaraTaxDefaults.TaxCodesViewComponentName;
+
+            if (widgetZone.Equals(PublicWidgetZones.CheckoutConfirmTop) ||
+                widgetZone.Equals(PublicWidgetZones.OpCheckoutConfirmTop))
+            {
+                return AvalaraTaxDefaults.AddressValidationViewComponentName;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -692,79 +688,81 @@ namespace Nop.Plugin.Tax.Avalara
             });
 
             //locales
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Create", "Create request");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.CreateResponse", "Create response");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Error", "Error");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Refund", "Refund request");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.RefundResponse", "Refund response");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Void", "Void request");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.VoidResponse", "Void response");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress", "Default tax address");
-            this.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin", "Shipping origin address");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm", "For the correct tax calculation we need the most accurate address, so we clarified the address you entered ({0}) through the validation system. Do you confirm the use of this updated address ({1})?");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error", "For the correct tax calculation we need the most accurate address. There are some errors from the validation system: {0}");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Configuration", "Configuration");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId", "Account ID");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint", "Specify Avalara account ID.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions", "Commit transactions");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint", "Determine whether to commit tax transactions right after they are saved.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company", "Company");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning", "The default currency used by this company does not match the primary store currency");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Hint", "Choose a company that was previously added to the Avalara account.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.NotExist", "There are no active companies");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode", "Entity use code");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.Hint", "Choose a code that can be used to designate the reason for a particular sale being exempt. Each entity use code stands for a different exemption reason, the logic of which can be found in Avalara exemption reason documentation.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.None", "None");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey", "License key");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint", "Specify Avalara account license key.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription", "Description");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType", "Type");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType", "Tax origin address");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint", "Choose which address will be used as the origin for tax requests to Avalara services.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox", "Use sandbox");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint", "Determine whether to use sandbox (testing environment).");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress", "Validate address");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress.Hint", "Determine whether to validate entered by customer addresses before the tax calculation.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export", "Export to Avalara (selected)");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported", "Selected products have already been exported");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error", "An error has occurred on export products");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success", "Successfully exported {0} products");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log", "Log");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.BackToList", "back to log");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.ClearLog", "Clear log");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate", "Created on");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate.Hint", "Date and time the log entry was created.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer", "Customer");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer.Hint", "Name of the customer.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Deleted", "The log entry has been deleted successfully.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Hint", "View log entry details");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType", "Type");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType.Hint", "The type of log entry.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Message", "Message");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Message.Hint", "The details for the log entry.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom", "Created from");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom.Hint", "The creation from date for the search.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo", "Created to");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo.Hint", "The creation to date for the search.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType", "Type");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType.Hint", "Select a log type.");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes", "Avalara tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete", "Delete Avalara system tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error", "An error has occurred on delete tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Success", "System tax codes successfully deleted");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export", "Export tax codes to Avalara");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.AlreadyExported", "All tax codes have already been exported");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Error", "An error has occurred on export tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Success", "Successfully exported {0} tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import", "Import Avalara system tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Error", "An error has occurred on import tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Success", "Successfully imported {0} tax codes");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax", "Test tax calculation");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Error", "An error has occurred on tax request");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Success", "The tax was successfully received");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials", "Test connection");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Declined", "Credentials declined");
-            this.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Verified", "Credentials verified");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Create", "Create request");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.CreateResponse", "Create response");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Error", "Error");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Refund", "Refund request");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.RefundResponse", "Refund response");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Void", "Void request");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.VoidResponse", "Void response");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress", "Default tax address");
+            _localizationService.AddOrUpdatePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin", "Shipping origin address");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm", "For the correct tax calculation we need the most accurate address, so we clarified the address you entered ({0}) through the validation system. Do you confirm the use of _localizationService updated address ({1})?");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error", "For the correct tax calculation we need the most accurate address. There are some errors from the validation system: {0}");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Configuration", "Configuration");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId", "Account ID");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint", "Specify Avalara account ID.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions", "Commit transactions");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint", "Determine whether to commit tax transactions right after they are saved.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company", "Company");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning", "The default currency used by _localizationService company does not match the primary store currency");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Hint", "Choose a company that was previously added to the Avalara account.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.NotExist", "There are no active companies");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode", "Entity use code");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.Hint", "Choose a code that can be used to designate the reason for a particular sale being exempt. Each entity use code stands for a different exemption reason, the logic of which can be found in Avalara exemption reason documentation.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.None", "None");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey", "License key");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint", "Specify Avalara account license key.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription", "Description");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType", "Type");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType", "Tax origin address");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint", "Choose which address will be used as the origin for tax requests to Avalara services.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox", "Use sandbox");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint", "Determine whether to use sandbox (testing environment).");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress", "Validate address");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress.Hint", "Determine whether to validate entered by customer addresses before the tax calculation.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export", "Export to Avalara (selected)");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported", "Selected products have already been exported");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error", "An error has occurred on export products");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success", "Successfully exported {0} products");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log", "Log");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.BackToList", "back to log");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.ClearLog", "Clear log");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate", "Created on");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate.Hint", "Date and time the log entry was created.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer", "Customer");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer.Hint", "Name of the customer.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Deleted", "The log entry has been deleted successfully.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Hint", "View log entry details");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.RequestMessage", "Request message");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.RequestMessage.Hint", "The details of the request.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.ResponseMessage", "Response message");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.ResponseMessage.Hint", "The details of the response.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.StatusCode", "Status code");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.StatusCode.Hint", "The status code of the response.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Url", "Url");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Url.Hint", "The requested URL.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom", "Created from");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom.Hint", "The creation from date for the search.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo", "Created to");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo.Hint", "The creation to date for the search.");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes", "Avalara tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete", "Delete Avalara system tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error", "An error has occurred on delete tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Success", "System tax codes successfully deleted");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export", "Export tax codes to Avalara");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.AlreadyExported", "All tax codes have already been exported");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Error", "An error has occurred on export tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Success", "Successfully exported {0} tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import", "Import Avalara system tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Error", "An error has occurred on import tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Success", "Successfully imported {0} tax codes");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax", "Test tax calculation");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Error", "An error has occurred on tax request");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Success", "The tax was successfully received");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials", "Test connection");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Declined", "Credentials declined");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Verified", "Credentials verified");
 
             base.Install();
         }
@@ -810,79 +808,83 @@ namespace Nop.Plugin.Tax.Avalara
             _settingService.DeleteSetting<AvalaraTaxSettings>();
 
             //locales
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Create");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.CreateResponse");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Error");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Refund");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.RefundResponse");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Void");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.VoidResponse");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress");
-            this.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Configuration");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.NotExist");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.None");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.BackToList");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.ClearLog");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Deleted");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.LogType.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Message");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Message.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.LogType.Hint");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Success");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.AlreadyExported");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Error");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Success");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Error");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Success");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Error");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Success");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Declined");
-            this.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Verified");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Create");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.CreateResponse");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Error");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Refund");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.RefundResponse");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.Void");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.LogType.VoidResponse");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.DefaultTaxAddress");
+            _localizationService.DeletePluginLocaleResource("Enums.Nop.Plugin.Tax.Avalara.Domain.TaxOriginAddressType.ShippingOrigin");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Confirm");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.AddressValidation.Error");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Configuration");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.AccountId.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.CommitTransactions.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Currency.Warning");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.Company.NotExist");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.EntityUseCode.None");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.LicenseKey.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeDescription");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxCodeType");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.TaxOriginAddressType.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.UseSandbox.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Fields.ValidateAddress.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.AlreadyExported");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Error");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Items.Export.Success");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.BackToList");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.ClearLog");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.CreatedDate.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Customer.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Deleted");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Message");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Message.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.RequestMessage");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.RequestMessage.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.ResponseMessage");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.ResponseMessage.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.StatusCode");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.StatusCode.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Url");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Url.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedFrom.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.Log.Search.CreatedTo.Hint");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Error");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Delete.Success");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.AlreadyExported");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Error");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Export.Success");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Error");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TaxCodes.Import.Success");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Error");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.TestTax.Success");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Declined");
+            _localizationService.DeletePluginLocaleResource("Plugins.Tax.Avalara.VerifyCredentials.Verified");
 
             base.Uninstall();
         }

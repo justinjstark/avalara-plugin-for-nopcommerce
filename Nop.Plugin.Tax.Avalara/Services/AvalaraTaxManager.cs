@@ -11,7 +11,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
     /// <summary>
     /// Represents the manager that operates with requests to the Avalara services
     /// </summary>
-    public class AvalaraTaxManager
+    public class AvalaraTaxManager : IDisposable
     {
         #region Fields
 
@@ -19,6 +19,8 @@ namespace Nop.Plugin.Tax.Avalara.Services
         private readonly ILogger _logger;
         private readonly ITaxTransactionLogService _taxTransactionLogService;
         private readonly IWorkContext _workContext;
+
+        private AvaTaxClient _serviceClient;
 
         #endregion
 
@@ -37,6 +39,54 @@ namespace Nop.Plugin.Tax.Avalara.Services
 
         #endregion
 
+        #region Properties
+
+        /// <summary>
+        /// Gets client that connects to Avalara services
+        /// </summary>
+        private AvaTaxClient ServiceClient
+        {
+            get
+            {
+                if (_serviceClient == null)
+                {
+                    //create a client with credentials
+                    _serviceClient = new AvaTaxClient(AvalaraTaxDefaults.ApplicationName,
+                        AvalaraTaxDefaults.ApplicationVersion, Environment.MachineName,
+                        _avalaraTaxSettings.UseSandbox ? AvaTaxEnvironment.Sandbox : AvaTaxEnvironment.Production)
+                        .WithSecurity(_avalaraTaxSettings.AccountId, _avalaraTaxSettings.LicenseKey);
+
+                    //invoke method after each request to services completed
+                    _serviceClient.CallCompleted += OnCallCompleted;
+                }
+
+                return _serviceClient;
+            }
+        }
+
+        /// <summary>
+        /// Event handler
+        /// </summary>
+        /// <param name="sender">Sender</param>
+        /// <param name="args">Event args</param>
+        private void OnCallCompleted(object sender, EventArgs args)
+        {
+            var avaTaxCallEventArgs = args as AvaTaxCallEventArgs;
+
+            //log request results
+            _taxTransactionLogService.InsertTaxTransactionLog(new TaxTransactionLog
+            {
+                StatusCode = (int)avaTaxCallEventArgs.Code,
+                Url = avaTaxCallEventArgs.RequestUri.ToString(),
+                RequestMessage = avaTaxCallEventArgs.RequestBody,
+                ResponseMessage = avaTaxCallEventArgs.ResponseString,
+                CustomerId = _workContext.CurrentCustomer.Id,
+                CreatedDateUtc = DateTime.UtcNow
+            });
+        }
+
+        #endregion
+
         #region Utilities
 
         /// <summary>
@@ -47,24 +97,6 @@ namespace Nop.Plugin.Tax.Avalara.Services
         {
             return !string.IsNullOrEmpty(_avalaraTaxSettings.AccountId)
                 && !string.IsNullOrEmpty(_avalaraTaxSettings.LicenseKey);
-        }
-
-        /// <summary>
-        /// Create client that connects to Avalara services
-        /// </summary>
-        /// <returns>Avalara client</returns>
-        private AvaTaxClient CreateServiceClient()
-        {
-            //create a client
-            var serviceClient = new AvaTaxClient(AvalaraTaxDefaults.ApplicationName,
-                AvalaraTaxDefaults.ApplicationVersion,
-                Environment.MachineName,
-                _avalaraTaxSettings.UseSandbox ? AvaTaxEnvironment.Sandbox : AvaTaxEnvironment.Production);
-
-            //use credentials
-            serviceClient.WithSecurity(_avalaraTaxSettings.AccountId, _avalaraTaxSettings.LicenseKey);
-
-            return serviceClient;
         }
 
         /// <summary>
@@ -89,9 +121,6 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 var errorMessage = exception.Message;
                 if (exception is AvaTaxError avaTaxError && avaTaxError.error != null)
                 {
-                    //log tax transaction error
-                    LogTaxTransaction(avaTaxError.error, LogType.Error);
-
                     var errorInfo = avaTaxError.error.error;
                     if (errorInfo != null)
                     {
@@ -111,23 +140,6 @@ namespace Nop.Plugin.Tax.Avalara.Services
             }
         }
 
-        /// <summary>
-        /// Log tax transaction details
-        /// </summary>
-        /// <typeparam name="T">Type of value</typeparam>
-        /// <param name="value">Value</param>
-        /// <param name="logType">Log type</param>
-        private void LogTaxTransaction<T>(T value, LogType logType)
-        {
-            _taxTransactionLogService.InsertTaxTransactionLog(new TaxTransactionLog
-            {
-                LogType = logType,
-                Message = value.ToString(),
-                CustomerId = _workContext.CurrentCustomer.Id,
-                CreatedDateUtc = DateTime.UtcNow
-            });
-        }
-
         #endregion
 
         #region Methods
@@ -138,7 +150,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
         /// <returns>Ping result</returns>
         public PingResultModel Ping()
         {
-            return HandleRequest(() => CreateServiceClient().Ping() ?? throw new NopException("No response from the service"));
+            return HandleRequest(() => ServiceClient.Ping() ?? throw new NopException("No response from the service"));
         }
 
         /// <summary>
@@ -154,7 +166,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 var filter = activeOnly ? "isActive eq true" : null;
 
                 //get result
-                var result = CreateServiceClient().QueryCompanies(null, filter, null, null, null)
+                var result = ServiceClient.QueryCompanies(null, filter, null, null, null)
                     ?? throw new NopException("No response from the service");
 
                 //return the paginated and filtered list
@@ -171,7 +183,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             return HandleRequest(() =>
             {
                 //get result
-                var result = CreateServiceClient().ListEntityUseCodes(null, null, null, null)
+                var result = ServiceClient.ListEntityUseCodes(null, null, null, null)
                     ?? throw new NopException("No response from the service");
 
                 //return the paginated and filtered list
@@ -188,7 +200,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             return HandleRequest(() =>
             {
                 //get result
-                var result = CreateServiceClient().ListTaxCodeTypes(null, null, null, null)
+                var result = ServiceClient.ListTaxCodeTypes(null, null)
                     ?? throw new NopException("No response from the service");
 
                 //return the list of tax code types
@@ -209,7 +221,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 var filter = activeOnly ? "isActive eq true" : null;
 
                 //get result
-                var result = CreateServiceClient().ListTaxCodes(filter, null, null, null)
+                var result = ServiceClient.ListTaxCodes(filter, null, null, null)
                     ?? throw new NopException("No response from the service");
 
                 //return the paginated and filtered list
@@ -238,7 +250,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 var filter = activeOnly ? "isActive eq true" : null;
 
                 //get result
-                var result = CreateServiceClient().ListTaxCodesByCompany(selectedCompany.id, filter, null, null, null, null)
+                var result = ServiceClient.ListTaxCodesByCompany(selectedCompany.id, filter, null, null, null, null)
                     ?? throw new NopException("No response from the service");
 
                 //return the paginated and filtered list
@@ -264,7 +276,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     ?? throw new NopException("Failed to retrieve company");
 
                 //create tax codes and return the result
-                return CreateServiceClient().CreateTaxCodes(selectedCompany.id, taxCodeModels)
+                return ServiceClient.CreateTaxCodes(selectedCompany.id, taxCodeModels)
                     ?? throw new NopException("No response from the service");
             });
         }
@@ -286,7 +298,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     ?? throw new NopException("Failed to retrieve company");
 
                 //get result
-                var result = CreateServiceClient().ListItemsByCompany(selectedCompany.id, null, null, null, null, null)
+                var result = ServiceClient.ListItemsByCompany(selectedCompany.id, null, null, null, null, null)
                     ?? throw new NopException("No response from the service");
 
                 //return the paginated and filtered list
@@ -312,7 +324,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     ?? throw new NopException("Failed to retrieve company");
 
                 //create items and return the result
-                return CreateServiceClient().CreateItems(selectedCompany.id, itemModels)
+                return ServiceClient.CreateItems(selectedCompany.id, itemModels)
                     ?? throw new NopException("No response from the service");
             });
         }
@@ -331,7 +343,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
                     throw new NopException("Company not selected");
 
                 //return result
-                return CreateServiceClient().GetTransactionByCodeAndType(_avalaraTaxSettings.CompanyCode, transactionCode, type, null)
+                return ServiceClient.GetTransactionByCodeAndType(_avalaraTaxSettings.CompanyCode, transactionCode, type, null)
                     ?? throw new NopException("No response from the service");
             });
         }
@@ -346,17 +358,9 @@ namespace Nop.Plugin.Tax.Avalara.Services
         {
             return HandleRequest(() =>
             {
-                //log tax transaction request
-                if (logTransactionDetails)
-                    LogTaxTransaction(createTransactionModel, LogType.Create);
-
                 //create transaction
-                var transaction = CreateServiceClient().CreateTransaction(string.Empty, createTransactionModel)
+                var transaction = ServiceClient.CreateTransaction(string.Empty, createTransactionModel)
                     ?? throw new NopException("No response from the service");
-
-                //log tax transaction response
-                if (logTransactionDetails)
-                    LogTaxTransaction(transaction, LogType.CreateResponse);
 
                 //whether there are any errors
                 if (transaction.messages?.Any() ?? false)
@@ -383,15 +387,9 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 if (string.IsNullOrEmpty(_avalaraTaxSettings.CompanyCode) || _avalaraTaxSettings.CompanyCode.Equals(Guid.Empty.ToString()))
                     throw new NopException("Company not selected");
 
-                //log tax transaction request
-                LogTaxTransaction(voidTransactionModel, LogType.Void);
-
                 //return result
-                var transaction = CreateServiceClient().VoidTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, voidTransactionModel)
+                var transaction = ServiceClient.VoidTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, null, voidTransactionModel)
                     ?? throw new NopException("No response from the service");
-
-                //log tax transaction response
-                LogTaxTransaction(transaction, LogType.VoidResponse);
 
                 return transaction;
             });
@@ -410,15 +408,10 @@ namespace Nop.Plugin.Tax.Avalara.Services
                 if (string.IsNullOrEmpty(_avalaraTaxSettings.CompanyCode) || _avalaraTaxSettings.CompanyCode.Equals(Guid.Empty.ToString()))
                     throw new NopException("Company not selected");
 
-                //log tax transaction request
-                LogTaxTransaction(refundTransactionModel, LogType.Refund);
-
                 //return result
-                var transaction = CreateServiceClient().RefundTransaction(_avalaraTaxSettings.CompanyCode, transactionCode, null, refundTransactionModel)
+                var transaction = ServiceClient.RefundTransaction(_avalaraTaxSettings.CompanyCode,
+                    transactionCode, null, null, null, refundTransactionModel)
                     ?? throw new NopException("No response from the service");
-
-                //log tax transaction response
-                LogTaxTransaction(transaction, LogType.RefundResponse);
 
                 return transaction;
             });
@@ -434,9 +427,18 @@ namespace Nop.Plugin.Tax.Avalara.Services
             return HandleRequest(() =>
             {
                 //return result
-                return CreateServiceClient().ResolveAddressPost(addressToValidate)
+                return ServiceClient.ResolveAddressPost(addressToValidate)
                     ?? throw new NopException("No response from the service");
             });
+        }
+
+        /// <summary>
+        /// Dispose object
+        /// </summary>
+        public void Dispose()
+        {
+            if (_serviceClient != null)
+                _serviceClient.CallCompleted -= OnCallCompleted;
         }
 
         #endregion

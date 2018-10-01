@@ -30,18 +30,34 @@
                     <div class="panel-body">
                         <div class="form-group">
                             <div class="col-md-3">
-                                <nop-label asp-for="LogType" />
+                                <nop-label asp-for="StatusCode" />
                             </div>
                             <div class="col-md-9">
-                                <div class="form-text-row">@Model.LogType</div>
+                                <div class="form-text-row">@Html.Raw(Model.StatusCode)</div>
                             </div>
                         </div>
                         <div class="form-group">
                             <div class="col-md-3">
-                                <nop-label asp-for="Message" />
+                                <nop-label asp-for="Url" />
                             </div>
                             <div class="col-md-9">
-                                <div class="form-text-row">@Html.Raw(Model.Message)</div>
+                                <div class="form-text-row">@Html.Raw(Model.Url)</div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="col-md-3">
+                                <nop-label asp-for="RequestMessage" />
+                            </div>
+                            <div class="col-md-9">
+                                <div class="form-text-row" style="word-break: break-all">@Html.Raw(Model.RequestMessage)</div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="col-md-3">
+                                <nop-label asp-for="ResponseMessage" />
+                            </div>
+                            <div class="col-md-9">
+                                <div class="form-text-row" style="word-break: break-all">@Html.Raw(Model.ResponseMessage)</div>
                             </div>
                         </div>
                         <div class="form-group">

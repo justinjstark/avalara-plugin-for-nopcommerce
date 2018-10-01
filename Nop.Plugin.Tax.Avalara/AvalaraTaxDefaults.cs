@@ -1,5 +1,4 @@
-﻿using Nop.Core.Infrastructure;
-using Nop.Services.Tax;
+﻿using Nop.Core;
 
 namespace Nop.Plugin.Tax.Avalara
 {
@@ -19,12 +18,9 @@ namespace Nop.Plugin.Tax.Avalara
         public static string ApplicationName => "nopCommerce-AvalaraTaxRateProvider|a0o33000004BoPM";
 
         /// <summary>
-        /// Avalara tax provider version
+        /// Avalara tax provider version (used a nopCommerce version here)
         /// </summary>
-        public static string ApplicationVersion =>
-            //for some reason Avalara managers want to see just "v4" string as a version, so let's do it
-            //EngineContext.Current.Resolve<ITaxService>()?.LoadTaxProviderBySystemName(SystemName)?.PluginDescriptor.Version ?? "2.00";
-            "v4";
+        public static string ApplicationVersion => $"v{NopVersion.CurrentVersion}";
 
         /// <summary>
         /// Name of the generic attribute that is used to store Avalara system tax code description
@@ -97,51 +93,6 @@ namespace Nop.Plugin.Tax.Avalara
         /// Name of the view component to validate entered address
         /// </summary>
         public const string AddressValidationViewComponentName = "AvalaraAddressValidation";
-
-        /// <summary>
-        /// Customer details widget zone
-        /// </summary>
-        public const string CustomerDetailsWidgetZone = "admin_customer_details_info_top";
-
-        /// <summary>
-        /// Customer role details widget zone
-        /// </summary>
-        public const string CustomerRoleDetailsWidgetZone = "admin_customer_role_details_top";
-
-        /// <summary>
-        /// Product details widget zone
-        /// </summary>
-        public const string ProductDetailsWidgetZone = "admin_product_details_info_column_left_top";
-
-        /// <summary>
-        /// Checkout attribute details widget zone
-        /// </summary>
-        public const string CheckoutAttributeDetailsWidgetZone = "admin_checkout_attribute_details_info_top";
-
-        /// <summary>
-        /// Tax settings widget zone
-        /// </summary>
-        public const string TaxSettingsWidgetZone = "admin_tax_settings_top";
-
-        /// <summary>
-        /// Product list buttons widget zone
-        /// </summary>
-        public const string ProductListButtonsWidgetZone = "admin_product_list_buttons";
-
-        /// <summary>
-        /// Tax categories buttons widget zone
-        /// </summary>
-        public const string TaxCategoriesButtonsWidgetZone = "admin_tax_category_list_buttons";
-
-        /// <summary>
-        /// Checkout confirmation page widget zone
-        /// </summary>
-        public const string CheckoutConfirmPageWidgetZone = "checkout_confirm_top";
-
-        /// <summary>
-        /// One page checkout confirmation page widget zone
-        /// </summary>
-        public const string OnePageCheckoutConfirmPageWidgetZone = "op_checkout_confirm_top";
 
         /// <summary>
         /// Custom data objects context name
