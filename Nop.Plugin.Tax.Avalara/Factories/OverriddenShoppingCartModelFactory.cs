@@ -14,6 +14,7 @@ using Nop.Core.Domain.Shipping;
 using Nop.Core.Domain.Tax;
 using Nop.Core.Domain.Vendors;
 using Nop.Core.Http.Extensions;
+using Nop.Plugin.Tax.Avalara.Domain;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Customers;
@@ -174,44 +175,25 @@ namespace Nop.Plugin.Tax.Avalara.Factories
         #region Utilities
 
         /// <summary>
-        /// Get tax total by Avalara tax service
+        /// Prepare tax details by Avalara tax service
         /// </summary>
         /// <param name="cart">Shopping cart</param>
-        /// <param name="shippingMethodName">Shipping method name</param>
-        /// <param name="paymentMethodAdditionalFee">Payment method additional fee</param>
-        /// <returns>Tax total</returns>
-        private decimal? GetTaxTotal(IList<ShoppingCartItem> cart, string shippingMethodName, decimal paymentMethodAdditionalFee)
+        private void PrepareTaxDetails(IList<ShoppingCartItem> cart)
         {
             //ensure that Avalara tax provider is active
             if (!(_taxService.LoadActiveTaxProvider(_workContext.CurrentCustomer) is AvalaraTaxProvider taxProvider))
-                return null;
-
-            //get order payment info
-            var processPaymentRequest = _httpContextAccessor.HttpContext.Session.Get<ProcessPaymentRequest>("OrderPaymentInfo");
-            if (processPaymentRequest == null)
-                return null;
+                return;
 
             //create dummy order for the tax request
-            var order = new Order
-            {
-                BillingAddress = _workContext.CurrentCustomer.BillingAddress,
-                CheckoutAttributesXml = _genericAttributeService.GetAttribute<string>(_workContext.CurrentCustomer,
-                    NopCustomerDefaults.CheckoutAttributes, processPaymentRequest.StoreId),
-                Customer = _workContext.CurrentCustomer,
-                OrderGuid = processPaymentRequest.OrderGuid,
-                OrderShippingExclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, false) ?? 0,
-                PaymentMethodAdditionalFeeExclTax = _taxService
-                    .GetPaymentMethodAdditionalFee(paymentMethodAdditionalFee, false, _workContext.CurrentCustomer),
-                PaymentMethodSystemName = processPaymentRequest.PaymentMethodSystemName,
-                ShippingAddress = _workContext.CurrentCustomer.ShippingAddress,
-                ShippingMethod = shippingMethodName
-            };
+            var order = new Order { Customer = _workContext.CurrentCustomer };
 
-            //add pickup address
+            //addresses
+            order.BillingAddress = _workContext.CurrentCustomer.BillingAddress;
+            order.ShippingAddress = _workContext.CurrentCustomer.ShippingAddress;
             if (_shippingSettings.AllowPickUpInStore)
             {
                 var pickupPoint = _genericAttributeService.GetAttribute<PickupPoint>(_workContext.CurrentCustomer,
-                    NopCustomerDefaults.SelectedPickupPointAttribute, processPaymentRequest.StoreId);
+                    NopCustomerDefaults.SelectedPickupPointAttribute, _storeContext.CurrentStore.Id);
                 if (pickupPoint != null)
                 {
                     var country = _countryService.GetCountryByTwoLetterIsoCode(pickupPoint.CountryCode);
@@ -227,38 +209,63 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 }
             }
 
+            //checkout attributes
+            order.CheckoutAttributesXml = _genericAttributeService.GetAttribute<string>(_workContext.CurrentCustomer,
+                NopCustomerDefaults.CheckoutAttributes, _storeContext.CurrentStore.Id);
+
+            //shipping method
+            order.OrderShippingExclTax = _orderTotalCalculationService.GetShoppingCartShippingTotal(cart, false) ?? 0;
+            order.ShippingMethod = _genericAttributeService.GetAttribute<ShippingOption>(_workContext.CurrentCustomer,
+                NopCustomerDefaults.SelectedShippingOptionAttribute, _storeContext.CurrentStore.Id)?.Name;
+
+            //payment method
+            var paymentMethod = _genericAttributeService.GetAttribute<string>(_workContext.CurrentCustomer,
+                NopCustomerDefaults.SelectedPaymentMethodAttribute, _storeContext.CurrentStore.Id);
+            var paymentFee = _paymentService.GetAdditionalHandlingFee(cart, paymentMethod);
+            order.PaymentMethodAdditionalFeeExclTax = _taxService.GetPaymentMethodAdditionalFee(paymentFee, false, _workContext.CurrentCustomer);
+            order.PaymentMethodSystemName = paymentMethod;
+
             //add discount amount
-            _orderTotalCalculationService.GetShoppingCartSubTotal(cart, false, out decimal orderSubTotalDiscountExclTax, out _, out _, out _);
+            _orderTotalCalculationService.GetShoppingCartSubTotal(cart, false, out var orderSubTotalDiscountExclTax, out _, out _, out _);
             order.OrderSubTotalDiscountExclTax = orderSubTotalDiscountExclTax;
 
             //create dummy order items
             foreach (var cartItem in cart)
             {
-                order.OrderItems.Add(new OrderItem
+                var orderItem = new OrderItem
                 {
                     AttributesXml = cartItem.AttributesXml,
-                    PriceExclTax = _taxService.GetProductPrice(cartItem.Product,
-                        _priceCalculationService.GetSubTotal(cartItem, true, out _, out _, out _), false, _workContext.CurrentCustomer, out _),
                     Product = cartItem.Product,
                     Quantity = cartItem.Quantity
-                });
+                };
+
+                var itemSubtotal = _priceCalculationService.GetSubTotal(cartItem, true, out _, out _, out _);
+                orderItem.PriceExclTax = _taxService.GetProductPrice(cartItem.Product, itemSubtotal, false, _workContext.CurrentCustomer, out _);
+
+                order.OrderItems.Add(orderItem);
             }
 
-            //get tax total
-            var taxTotal = taxProvider.GetOrderTax(order);
+            //get tax details
+            var taxTransaction = taxProvider.CreateOrderTaxTransaction(order, false);
+            if (taxTransaction == null)
+                return;
 
-            //remove old value
-            if (processPaymentRequest.CustomValues.ContainsKey(AvalaraTaxDefaults.TaxTotalCustomValue))
-                processPaymentRequest.CustomValues.Remove(AvalaraTaxDefaults.TaxTotalCustomValue);
-
-            //save it for the further usage
-            if (taxTotal.HasValue)
+            //and save it for the further usage
+            var taxDetails = new TaxDetails { TaxTotal = taxTransaction.totalTax };
+            foreach (var item in taxTransaction.summary)
             {
-                processPaymentRequest.CustomValues.Add(AvalaraTaxDefaults.TaxTotalCustomValue, taxTotal.Value);
-                _httpContextAccessor.HttpContext.Session.Set("OrderPaymentInfo", processPaymentRequest);
-            }
+                if (!item.rate.HasValue || !item.tax.HasValue)
+                    continue;
 
-            return taxTotal;
+                var taxRate = item.rate.Value * 100;
+                var taxValue = item.tax.Value;
+
+                if (!taxDetails.TaxRates.ContainsKey(taxRate))
+                    taxDetails.TaxRates.Add(taxRate, taxValue);
+                else
+                    taxDetails.TaxRates[taxRate] = taxDetails.TaxRates[taxRate] + taxValue;
+            }
+            _httpContextAccessor.HttpContext.Session.Set(AvalaraTaxDefaults.TaxDetailsSessionValue, taxDetails);
         }
 
         #endregion
@@ -280,6 +287,10 @@ namespace Nop.Plugin.Tax.Avalara.Factories
 
             if (cart.Any())
             {
+                //Avalara plugin changes
+                PrepareTaxDetails(cart);
+                //Avalara plugin changes
+
                 //subtotal
                 var subTotalIncludingTax = _workContext.TaxDisplayType == TaxDisplayType.IncludingTax && !_taxSettings.ForceTaxExclusionFromOrderSubtotal;
                 _orderTotalCalculationService.GetShoppingCartSubTotal(cart, subTotalIncludingTax, out decimal orderSubTotalDiscountAmountBase, out List<DiscountForCaching> _, out decimal subTotalWithoutDiscountBase, out decimal _);
@@ -325,11 +336,7 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                     var paymentMethodAdditionalFeeWithTax = _currencyService.ConvertFromPrimaryStoreCurrency(paymentMethodAdditionalFeeWithTaxBase, _workContext.WorkingCurrency);
                     model.PaymentMethodAdditionalFee = _priceFormatter.FormatPaymentMethodAdditionalFee(paymentMethodAdditionalFeeWithTax, true);
                 }
-
-                //get tax total from the Avalara tax service, it may slightly differ from the original calculated tax 
-                var taxTotal = GetTaxTotal(cart, model.SelectedShippingMethod, paymentMethodAdditionalFee);
-                var adjustOrderTotal = 0M;
-
+                
                 //tax
                 var displayTax = true;
                 var displayTaxRates = true;
@@ -341,14 +348,23 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 else
                 {
                     var shoppingCartTaxBase = _orderTotalCalculationService.GetTaxTotal(cart, out SortedDictionary<decimal, decimal> taxRates);
-                    if (taxTotal.HasValue)
+
+                    //Avalara plugin changes
+                    //get tax details from the Avalara tax service, it may slightly differ from the original calculated tax
+                    var taxDetails = _httpContextAccessor.HttpContext.Session.Get<TaxDetails>(AvalaraTaxDefaults.TaxDetailsSessionValue);
+                    if (taxDetails != null)
                     {
-                        //adjust tax and order total according to received value from the Avalara
-                        adjustOrderTotal = taxTotal.Value - shoppingCartTaxBase;
-                        shoppingCartTaxBase = taxTotal.Value;
+                        //adjust tax total according to received value from the Avalara
+                        if (taxDetails.TaxTotal.HasValue)
+                            shoppingCartTaxBase = taxDetails.TaxTotal.Value;
+
+                        if (taxDetails.TaxRates?.Any() ?? false)
+                            taxRates = new SortedDictionary<decimal, decimal>(taxDetails.TaxRates);
                     }
+                    //Avalara plugin changes
 
                     var shoppingCartTax = _currencyService.ConvertFromPrimaryStoreCurrency(shoppingCartTaxBase, _workContext.WorkingCurrency);
+
                     if (shoppingCartTaxBase == 0 && _taxSettings.HideZeroTax)
                     {
                         displayTax = false;
@@ -377,8 +393,6 @@ namespace Nop.Plugin.Tax.Avalara.Factories
                 var shoppingCartTotalBase = _orderTotalCalculationService.GetShoppingCartTotal(cart, out decimal orderTotalDiscountAmountBase, out List<DiscountForCaching> _, out List<AppliedGiftCard> appliedGiftCards, out int redeemedRewardPoints, out decimal redeemedRewardPointsAmount);
                 if (shoppingCartTotalBase.HasValue)
                 {
-                    //adjust order total according to received tax total from the Avalara
-                    shoppingCartTotalBase += adjustOrderTotal;
                     var shoppingCartTotal = _currencyService.ConvertFromPrimaryStoreCurrency(shoppingCartTotalBase.Value, _workContext.WorkingCurrency);
                     model.OrderTotal = _priceFormatter.FormatPrice(shoppingCartTotal, true, false);
                 }

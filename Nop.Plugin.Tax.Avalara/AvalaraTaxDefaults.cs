@@ -38,9 +38,9 @@ namespace Nop.Plugin.Tax.Avalara
         public static string EntityUseCodeAttribute => "AvalaraEntityUseCode";
 
         /// <summary>
-        /// Name of a process payment request custom value to store tax total received from the Avalara
+        /// Name of a session custom value to store tax details received from the Avalara
         /// </summary>
-        public static string TaxTotalCustomValue => "AvalaraTaxTotal";
+        public static string TaxDetailsSessionValue => "AvalaraTaxDetails";
 
         /// <summary>
         /// Name of the field to specify the tax origin address type
