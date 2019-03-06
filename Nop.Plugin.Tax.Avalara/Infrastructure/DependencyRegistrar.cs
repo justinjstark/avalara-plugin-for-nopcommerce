@@ -30,6 +30,7 @@ namespace Nop.Plugin.Tax.Avalara.Infrastructure
         {
             //register overridden services and factories
             builder.RegisterType<OverriddenOrderProcessingService>().As<IOrderProcessingService>().InstancePerLifetimeScope();
+            builder.RegisterType<OverriddenOrderTotalCalculationService>().As<IOrderTotalCalculationService>().InstancePerLifetimeScope();
             builder.RegisterType<OverriddenShoppingCartModelFactory>().As<IShoppingCartModelFactory>().InstancePerLifetimeScope();
 
             //register custom services

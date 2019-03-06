@@ -138,7 +138,7 @@ namespace Nop.Plugin.Tax.Avalara
             var transactionModel = PrepareTaxModel(GetOrderDestinationAddress(order), order.Customer?.Id.ToString(), save);
 
             //prepare specific order parameters
-            transactionModel.code = CommonHelper.EnsureMaximumLength(save ? order.CustomOrderNumber : order.OrderGuid.ToString(), 50);
+            transactionModel.code = CommonHelper.EnsureMaximumLength(save ? order.CustomOrderNumber : Guid.NewGuid().ToString(), 50);
             transactionModel.commit = save && _avalaraTaxSettings.CommitTransactions;
             transactionModel.discount = order.OrderSubTotalDiscountExclTax;
             transactionModel.email = CommonHelper.EnsureMaximumLength(order.BillingAddress?.Email, 50);
@@ -149,7 +149,7 @@ namespace Nop.Plugin.Tax.Avalara
             //set whole request tax exemption
             var exemptedCustomerRole = order.Customer?.CustomerRoles.FirstOrDefault(role => role.Active && role.TaxExempt);
             if (order.Customer?.IsTaxExempt ?? false)
-                transactionModel.exemptionNo = CommonHelper.EnsureMaximumLength($"Exempt-customer-#{order.Customer.Id}", 25);
+                transactionModel.exemptionNo = CommonHelper.EnsureMaximumLength($"Exempt-customer-#{order.Customer?.Id}", 25);
             else if (!string.IsNullOrEmpty(exemptedCustomerRole?.Name))
                 transactionModel.exemptionNo = CommonHelper.EnsureMaximumLength($"Exempt-{exemptedCustomerRole.Name}", 25);
 
@@ -498,7 +498,7 @@ namespace Nop.Plugin.Tax.Avalara
                 return new CalculateTaxResult { TaxRate = _cacheManager.Get<decimal>(cacheKey) };
 
             //get estimated tax
-            var totalTax = GetEstimatedTax(calculateTaxRequest.Address, calculateTaxRequest.Customer?.Id.ToString());
+            var totalTax = CreateEstimatedTaxTransaction(calculateTaxRequest.Address, calculateTaxRequest.Customer?.Id.ToString())?.totalTax;
             if (!totalTax.HasValue)
                 return new CalculateTaxResult { Errors = new[] { "No response from the service" }.ToList() };
 
@@ -521,36 +521,15 @@ namespace Nop.Plugin.Tax.Avalara
         }
 
         /// <summary>
-        /// Get estimated tax total
-        /// </summary>
-        /// <param name="destinationAddress">Destination tax address</param>
-        /// <param name="customerCode">Customer code</param>
-        /// <returns>Tax total</returns>
-        public decimal? GetEstimatedTax(Address destinationAddress, string customerCode)
-        {
-            return CreateEstimatedTaxTransaction(destinationAddress, customerCode)?.totalTax;
-        }
-
-        /// <summary>
         /// Create tax transaction to get tax for the order
         /// </summary>
         /// <param name="order">Order</param>
         /// <param name="save">Whether to save tax transaction</param>
         /// <returns>Transaction</returns>
-        public TransactionModel CreateOrderTaxTransaction(Order order, bool save = true)
+        public TransactionModel CreateOrderTaxTransaction(Order order, bool save)
         {
             var transactionModel = PrepareOrderTaxModel(order, save);
             return _avalaraTaxManager.CreateTaxTransaction(transactionModel, save);
-        }
-
-        /// <summary>
-        /// Get order tax total
-        /// </summary>
-        /// <param name="order">Order</param>
-        /// <returns>tax total</returns>
-        public decimal? GetOrderTax(Order order)
-        {
-            return CreateOrderTaxTransaction(order, false)?.totalTax;
         }
 
         /// <summary>

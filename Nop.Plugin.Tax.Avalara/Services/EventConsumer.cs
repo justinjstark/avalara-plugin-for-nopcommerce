@@ -201,7 +201,7 @@ namespace Nop.Plugin.Tax.Avalara.Services
             if (_taxService.LoadActiveTaxProvider(eventMessage.Order.Customer) is AvalaraTaxProvider taxProvider)
             {
                 //create tax transaction
-                taxProvider.CreateOrderTaxTransaction(eventMessage.Order);
+                taxProvider.CreateOrderTaxTransaction(eventMessage.Order, true);
             }
         }
 
